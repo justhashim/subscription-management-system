@@ -130,7 +130,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "outstanding", header: "Outstanding", cell: (customer) => <span className="font-medium tabular-nums">{formatCurrency(customer.outstandingAmount, "USD")}</span> },
       { id: "created", header: "Customer since", cell: (customer) => <span className="text-muted-foreground">{formatDate(customer.createdAt)}</span>, className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
     ];
-    return <OperationsTable mode="customers" heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["ACTIVE", "INACTIVE", "PROSPECT"]} count={`${rows.length} of ${snapshot.customers.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Users} emptyTitle="No customers found" actionLabel="Add customer" admin={isAdmin || isStaff} />;
+    return <OperationsTable mode="customers" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["ACTIVE", "INACTIVE", "PROSPECT"]} count={`${rows.length} of ${snapshot.customers.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Users} emptyTitle="No customers found" actionLabel="Add customer" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "quotes") {
@@ -145,7 +145,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "valid", header: "Valid until", cell: (quote) => <span className="text-muted-foreground">{formatDate(quote.validUntil)}</span> },
       { id: "total", header: "Total", cell: (quote) => <span className="font-medium tabular-nums">{formatCurrency(quote.total, "USD")}</span> },
     ];
-    return <OperationsTable mode="quotes" heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "QUOTATION", "ACCEPTED", "EXPIRED", "CANCELED"]} count={`${rows.length} of ${snapshot.quotes.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={FileCheck2} emptyTitle="No quotations found" actionLabel="New quotation" admin={isAdmin || isStaff} />;
+    return <OperationsTable mode="quotes" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "QUOTATION", "ACCEPTED", "EXPIRED", "CANCELED"]} count={`${rows.length} of ${snapshot.quotes.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={FileCheck2} emptyTitle="No quotations found" actionLabel="New quotation" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "invoices") {
@@ -160,7 +160,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "due", header: "Due", cell: (invoice) => <span className="text-muted-foreground">{formatDate(invoice.dueDate)}</span>, className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
       { id: "total", header: "Balance", cell: (invoice) => <div><p className="font-medium tabular-nums">{formatCurrency(invoice.total - invoice.paidAmount, "USD")}</p><p className="text-xs text-muted-foreground">of {formatCurrency(invoice.total, "USD")}</p></div> },
     ];
-    return <OperationsTable mode="invoices" heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "CONFIRMED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELED"]} count={`${rows.length} of ${snapshot.invoices.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={ReceiptText} emptyTitle="No invoices found" actionLabel="Create invoice" admin={isAdmin || isStaff} />;
+    return <OperationsTable mode="invoices" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "CONFIRMED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELED"]} count={`${rows.length} of ${snapshot.invoices.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={ReceiptText} emptyTitle="No invoices found" actionLabel="Create invoice" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "payments") {
@@ -172,7 +172,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "date", header: "Date", cell: (payment) => <span className="text-muted-foreground">{formatDate(payment.paymentDate)}</span> },
       { id: "amount", header: "Amount", cell: (payment) => <span className="font-medium tabular-nums">{formatCurrency(payment.amount, "USD")}</span> },
     ];
-    return <OperationsTable mode="payments" heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.payments.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={WalletCards} emptyTitle="No payments recorded" actionLabel="Record payment" admin={isAdmin || isStaff} />;
+    return <OperationsTable mode="payments" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.payments.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={WalletCards} emptyTitle="No payments recorded" actionLabel="Record payment" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "discounts") {
@@ -184,7 +184,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "usage", header: "Usage", cell: (discount) => <span className="tabular-nums">{discount.usedRedemptions}{discount.maxRedemptions ? ` / ${discount.maxRedemptions}` : ""}</span> },
       { id: "status", header: "Status", cell: (discount) => <StatusBadge status={discount.status} /> },
     ];
-    return <OperationsTable mode="discounts" heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.discounts.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Sparkles} emptyTitle="No discount rules" actionLabel="Create discount" admin={isAdmin} />;
+    return <OperationsTable mode="discounts" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.discounts.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Sparkles} emptyTitle="No discount rules" actionLabel="Create discount" admin={isAdmin} />;
   }
 
   const rows = snapshot.billingRuns.filter((run) => !query || `${run.number} ${run.status}`.toLowerCase().includes(query));
@@ -198,7 +198,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
   return <BillingView heading={heading} search={search} setSearch={setSearch} rows={rows} columns={columns} isAdmin={isAdmin || isStaff} />;
 }
 
-function OperationsTable<T>({ mode, heading, search, setSearch, status, setStatus, statusOptions, count, data, columns, keyOf, icon, emptyTitle, actionLabel, admin }: { mode: Exclude<OperationsMode, "billing" | "reports" | "portal">; heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; status: string; setStatus: (value: string) => void; statusOptions: string[]; count: string; data: T[]; columns: DataColumn<T>[]; keyOf: (row: T) => string; icon: typeof Users; emptyTitle: string; actionLabel: string; admin: boolean }) {
+function OperationsTable<T>({ mode, snapshot, heading, search, setSearch, status, setStatus, statusOptions, count, data, columns, keyOf, icon, emptyTitle, actionLabel, admin }: { mode: Exclude<OperationsMode, "billing" | "reports" | "portal">; snapshot: OperationsSnapshot; heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; status: string; setStatus: (value: string) => void; statusOptions: string[]; count: string; data: T[]; columns: DataColumn<T>[]; keyOf: (row: T) => string; icon: typeof Users; emptyTitle: string; actionLabel: string; admin: boolean }) {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const createRecord = () => {
@@ -220,16 +220,21 @@ function OperationsTable<T>({ mode, heading, search, setSearch, status, setStatu
         </div>
       </div>
       <DataTable data={data} columns={columns} getRowKey={keyOf} emptyState={<EmptyState icon={icon} title={emptyTitle} description="Records will appear here as your team works through the billing cycle." action={admin ? <Button size="sm" onClick={createRecord}><Plus />{actionLabel}</Button> : undefined} />} />
-      <OperationCreateDialog mode={mode} open={open} onOpenChange={setOpen} onCreated={() => void queryClient.invalidateQueries({ queryKey: queryKeys.operations })} />
+      <OperationCreateDialog mode={mode} snapshot={snapshot} open={open} onOpenChange={setOpen} onCreated={() => void queryClient.invalidateQueries({ queryKey: queryKeys.operations })} />
     </div>
   );
 }
 
-function OperationCreateDialog({ mode, open, onOpenChange, onCreated }: { mode: Exclude<OperationsMode, "billing" | "reports" | "portal">; open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
+function OperationCreateDialog({ mode, snapshot, open, onOpenChange, onCreated }: { mode: Exclude<OperationsMode, "billing" | "reports" | "portal">; snapshot: OperationsSnapshot; open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [amount, setAmount] = useState("10000");
   const [code, setCode] = useState("");
+  const [customerId, setCustomerId] = useState(snapshot.customers[0]?.id ?? "");
+  const products = loadMockData().products;
+  const [productId, setProductId] = useState(products[0]?.id ?? "");
+  const [invoiceId, setInvoiceId] = useState(snapshot.invoices[0]?.id ?? "");
+  const [method, setMethod] = useState<Payment["method"]>("ONLINE");
   const [saving, setSaving] = useState(false);
   const titles: Record<typeof mode, string> = { customers: "Add customer", quotes: "New quotation", invoices: "Create invoice", payments: "Record payment", discounts: "Create discount" };
   const descriptions: Record<typeof mode, string> = { customers: "Create a customer account for subscription operations.", quotes: "Create a starter quotation from the seeded catalogue.", invoices: "Create a draft invoice for a customer.", payments: "Record a payment against the latest invoice.", discounts: "Create a percentage discount rule.", };
@@ -241,8 +246,8 @@ function OperationCreateDialog({ mode, open, onOpenChange, onCreated }: { mode: 
       const data = loadMockData();
       const now = new Date();
       const future = new Date(now.getTime() + 30 * 86400000).toISOString();
-      const customer = data.customers[0];
-      const product = data.products[0];
+      const customer = data.customers.find((item) => item.id === customerId) ?? data.customers[0];
+      const product = data.products.find((item) => item.id === productId) ?? data.products[0];
       if (mode === "customers") {
         const customerName = name.trim() || "New customer";
         data.customers.unshift({ id: createId("cus"), name: customerName, legalName: customerName, email: email.trim() || `${createId("contact")}@example.com`, status: "ACTIVE", createdAt: now.toISOString(), activeSubscriptions: 0, outstandingAmount: 0 });
@@ -255,12 +260,12 @@ function OperationCreateDialog({ mode, open, onOpenChange, onCreated }: { mode: 
         const total = Math.max(0, Number(amount) || product.salesPrice || 0);
         data.invoices.unshift({ id: createId("inv"), number: `INV/${now.getFullYear()}/NEW`, customerId: customer.id, customerName: customer.name, status: "DRAFT", issueDate: now.toISOString(), dueDate: future, subtotal: total, taxAmount: 0, discountAmount: 0, total, paidAmount: 0, lines: [{ id: createId("line"), description: product.name, quantity: 1, unitPrice: total, taxRate: 0, taxAmount: 0, amount: total }] });
       } else if (mode === "payments") {
-        const invoice = data.invoices.find((item) => item.status !== "PAID" && item.status !== "CANCELED");
+        const invoice = data.invoices.find((item) => item.id === invoiceId) ?? data.invoices.find((item) => item.status !== "PAID" && item.status !== "CANCELED");
         if (!invoice) throw new Error("Create an invoice first.");
         const paymentAmount = Math.min(Math.max(1, Number(amount) || 1), invoice.total - invoice.paidAmount);
         invoice.paidAmount += paymentAmount;
         invoice.status = invoice.paidAmount >= invoice.total ? "PAID" : "PARTIALLY_PAID";
-        data.payments.unshift({ id: createId("pay"), number: `PAY/${now.getFullYear()}/NEW`, invoiceId: invoice.id, invoiceNumber: invoice.number, customerName: invoice.customerName, method: "ONLINE", amount: paymentAmount, paymentDate: now.toISOString(), status: "CONFIRMED" });
+        data.payments.unshift({ id: createId("pay"), number: `PAY/${now.getFullYear()}/NEW`, invoiceId: invoice.id, invoiceNumber: invoice.number, customerName: invoice.customerName, method, amount: paymentAmount, paymentDate: now.toISOString(), status: "CONFIRMED" });
       } else {
         data.discounts.unshift({ id: createId("dsc"), name: name.trim() || "New discount", code: code.trim().toUpperCase() || `SAVE${Math.floor(Math.random() * 90 + 10)}`, type: "PERCENTAGE", value: Math.min(100, Math.max(1, Number(amount) || 10)), minimumPurchase: 0, minimumQuantity: 1, startsAt: now.toISOString(), usedRedemptions: 0, status: "ACTIVE" });
       }
@@ -276,7 +281,7 @@ function OperationCreateDialog({ mode, open, onOpenChange, onCreated }: { mode: 
     }
   }
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{titles[mode]}</DialogTitle><DialogDescription>{descriptions[mode]}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{mode === "customers" ? <><div className="space-y-2"><Label htmlFor="customer-name">Name</Label><Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme Labs" required /></div><div className="space-y-2"><Label htmlFor="customer-email">Email</Label><Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="billing@acme.test" required /></div></> : null}{mode === "discounts" ? <><div className="space-y-2"><Label htmlFor="discount-name">Name</Label><Input id="discount-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Launch discount" required /></div><div className="space-y-2"><Label htmlFor="discount-code">Code</Label><Input id="discount-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="LAUNCH20" required /></div><div className="space-y-2"><Label htmlFor="discount-value">Percentage</Label><Input id="discount-value" type="number" min="1" max="100" value={amount} onChange={(event) => setAmount(event.target.value)} /></div></> : null}{["quotes", "invoices", "payments"].includes(mode) ? <div className="space-y-2"><Label htmlFor="record-amount">Amount</Label><Input id="record-amount" type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} /></div> : null}<DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Create"}</Button></DialogFooter></form></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{titles[mode]}</DialogTitle><DialogDescription>{descriptions[mode]}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{mode === "customers" ? <><div className="space-y-2"><Label htmlFor="customer-name">Name</Label><Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme Labs" required /></div><div className="space-y-2"><Label htmlFor="customer-email">Email</Label><Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="billing@acme.test" required /></div></> : null}{["quotes", "invoices"].includes(mode) ? <><div className="space-y-2"><Label>Customer</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{snapshot.customers.map((item) => <SelectItem key={item.id} value={item.id}>{item.name} · {item.email}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Product</Label><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger><SelectContent>{products.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div></> : null}{mode === "payments" ? <><div className="space-y-2"><Label>Invoice</Label><Select value={invoiceId} onValueChange={setInvoiceId}><SelectTrigger><SelectValue placeholder="Select invoice" /></SelectTrigger><SelectContent>{snapshot.invoices.filter((item) => item.status !== "PAID" && item.status !== "CANCELED").map((item) => <SelectItem key={item.id} value={item.id}>{item.number} · {item.customerName}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Payment method</Label><Select value={method} onValueChange={(value) => setMethod(value as Payment["method"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ONLINE", "CARD", "UPI", "BANK_TRANSFER", "CASH", "CHEQUE"].map((item) => <SelectItem key={item} value={item}>{item.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div></> : null}{mode === "discounts" ? <><div className="space-y-2"><Label htmlFor="discount-name">Name</Label><Input id="discount-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Launch discount" required /></div><div className="space-y-2"><Label htmlFor="discount-code">Code</Label><Input id="discount-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="LAUNCH20" required /></div></> : null}{["quotes", "invoices", "payments", "discounts"].includes(mode) ? <div className="space-y-2"><Label htmlFor="record-amount">{mode === "discounts" ? "Percentage" : "Amount"}</Label><Input id="record-amount" type="number" min="1" max={mode === "discounts" ? 100 : undefined} value={amount} onChange={(event) => setAmount(event.target.value)} /></div> : null}<DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Create"}</Button></DialogFooter></form></DialogContent></Dialog>;
 }
 
 function BillingView({ heading, search, setSearch, rows, columns, isAdmin }: { heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; rows: BillingRun[]; columns: DataColumn<BillingRun>[]; isAdmin: boolean }) {
