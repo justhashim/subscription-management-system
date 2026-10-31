@@ -1,4 +1,4 @@
-# Brightloop Subscriptions — Subscription Management System
+#  Subscription Management System
 
 **Brightloop Subscriptions** is a full-stack subscription operations platform for managing products, plans, quotations, subscriptions, recurring billing, invoices, discounts, payments, and revenue reporting.
 
