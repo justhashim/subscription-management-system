@@ -378,6 +378,9 @@ export function SubscriptionsView({
         onRowClick={(subscription) =>
           router.push(`/subscriptions/${subscription.id}`)
         }
+        getRowLabel={(subscription) =>
+          `Open ${subscription.user.name}'s ${subscription.plan.name} subscription`
+        }
         emptyState={
           <EmptyState
             icon={CreditCard}

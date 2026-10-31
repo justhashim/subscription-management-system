@@ -282,6 +282,9 @@ export default function DashboardPage() {
               onRowClick={(subscription) =>
                 router.push(`/subscriptions/${subscription.id}`)
               }
+              getRowLabel={(subscription) =>
+                `Open ${subscription.user.name}'s ${subscription.plan.name} subscription`
+              }
               className="border-0 shadow-none"
               emptyState={
                 <EmptyState

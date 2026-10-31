@@ -26,6 +26,7 @@ interface DataTableProps<T> {
   skeletonRows?: number;
   emptyState?: ReactNode;
   onRowClick?: (row: T) => void;
+  getRowLabel?: (row: T) => string;
   className?: string;
 }
 
@@ -37,6 +38,7 @@ export function DataTable<T>({
   skeletonRows = 5,
   emptyState,
   onRowClick,
+  getRowLabel,
   className,
 }: DataTableProps<T>) {
   if (!loading && data.length === 0 && emptyState) {
@@ -82,6 +84,22 @@ export function DataTable<T>({
                   <TableRow
                     key={getRowKey(row)}
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={onRowClick ? 0 : undefined}
+                    aria-label={
+                      onRowClick
+                        ? (getRowLabel?.(row) ?? "Open row")
+                        : undefined
+                    }
                     className={cn(
                       "group",
                       onRowClick && "cursor-pointer hover:bg-muted/50",
