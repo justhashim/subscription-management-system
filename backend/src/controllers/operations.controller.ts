@@ -53,14 +53,14 @@ export default async function operationsController(app: FastifyInstance) {
          ${customerIds ? 'WHERE p.customer_id = ANY($1::uuid[])' : ''}
          ORDER BY p.payment_date DESC, p.created_at DESC LIMIT 100`, params,
       );
-      const discounts = await client.query(
+      const discounts = scope ? { rows: [] as any[] } : await client.query(
         `SELECT d.id, d.name, d.code, d.discount_type, d.discount_value, d.minimum_purchase,
                 d.minimum_quantity, d.starts_at, d.ends_at, d.max_redemptions, d.status,
                 COUNT(dr.id)::int AS used_redemptions
          FROM discounts d LEFT JOIN discount_redemptions dr ON dr.discount_id = d.id
          GROUP BY d.id ORDER BY d.created_at DESC`,
       );
-      const runs = await client.query(
+      const runs = scope ? { rows: [] as any[] } : await client.query(
         `SELECT id, run_number, billing_date, status, total_subscriptions, invoices_created,
                 started_at, completed_at,
                 COALESCE((SELECT SUM(total_amount) FROM invoices i WHERE i.billing_run_id = br.id AND i.status <> 'void'), 0) AS revenue

@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/error";
 import { useCreateSubscription } from "@/lib/api/hooks";
 import type { PlanWithProduct, User } from "@/types/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -27,11 +28,14 @@ import {
 } from "@/components/ui/select";
 import { Field, FormError } from "@/components/shared/form-field";
 import { formatPrice } from "@/lib/format";
+import { addMonths, format } from "date-fns";
 
 const subscriptionSchema = z.object({
-  userId: z.string().min(1, "Select a customer."),
+  customerId: z.string().min(1, "Select a customer."),
   planId: z.string().min(1, "Select a plan."),
-  status: z.enum(["TRIALING", "ACTIVE"]),
+  startDate: z.string().min(1, "Select a start date."),
+  endDate: z.string().optional(),
+  autoRenew: z.boolean(),
 });
 
 type SubscriptionValues = z.infer<typeof subscriptionSchema>;
@@ -50,12 +54,15 @@ export function SubscriptionDialog({
   const createSubscription = useCreateSubscription();
   const [formError, setFormError] = useState<string>();
   const defaults: SubscriptionValues = {
-    userId: users[0]?.id ?? "",
+    customerId: users[0]?.id ?? "",
     planId: plans[0]?.id ?? "",
-    status: "ACTIVE",
+    startDate: format(new Date(), "yyyy-MM-dd"),
+    endDate: format(addMonths(new Date(), 12), "yyyy-MM-dd"),
+    autoRenew: true,
   };
   const {
     handleSubmit,
+    register,
     control,
     formState: { errors, isSubmitting },
   } = useForm<SubscriptionValues>({
@@ -98,10 +105,10 @@ export function SubscriptionDialog({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <FormError message={formError} />
 
-          <Field label="Customer" error={errors.userId?.message}>
+          <Field label="Customer" error={errors.customerId?.message}>
             <Controller
               control={control}
-              name="userId"
+              name="customerId"
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger className="w-full">
@@ -119,6 +126,12 @@ export function SubscriptionDialog({
             />
           </Field>
 
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Start date" error={errors.startDate?.message}><Input type="date" {...register("startDate")} /></Field>
+            <Field label="End date" error={errors.endDate?.message}><Input type="date" {...register("endDate")} /></Field>
+            <label className="flex items-center gap-2 pt-7 text-sm"><input type="checkbox" className="size-4 accent-primary" {...register("autoRenew")} />Auto-renew</label>
+          </div>
+
           <Field label="Plan" error={errors.planId?.message}>
             <Controller
               control={control}
@@ -135,24 +148,6 @@ export function SubscriptionDialog({
                         {formatPrice(plan.price, plan.currency, plan.interval)}
                       </SelectItem>
                     ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </Field>
-
-          <Field label="Initial status" error={errors.status?.message}>
-            <Controller
-              control={control}
-              name="status"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ACTIVE">Active</SelectItem>
-                    <SelectItem value="TRIALING">Trialing</SelectItem>
                   </SelectContent>
                 </Select>
               )}

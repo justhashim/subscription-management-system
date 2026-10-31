@@ -30,6 +30,39 @@ import type {
   OperationsSnapshot,
 } from "@/types/api";
 
+function currentSession() {
+  return getClientSession();
+}
+
+function scopedUserId() {
+  const session = currentSession();
+  return session?.role === "CUSTOMER" ? session.id : undefined;
+}
+
+function customerIdForUser(userId: string) {
+  return `cus_${userId.replace(/^usr_/, "")}`;
+}
+
+function scopeData(data = loadMockData()) {
+  const userId = scopedUserId();
+  if (!userId) return data;
+  const customerId = customerIdForUser(userId);
+  const subscriptionIds = new Set(data.subscriptions.filter((item) => item.userId === userId).map((item) => item.id));
+  return {
+    ...data,
+    subscriptions: data.subscriptions.filter((item) => item.userId === userId),
+    customers: data.customers.filter((item) => item.id === customerId),
+    quotes: data.quotes.filter((item) => item.customerId === customerId && item.status !== "DRAFT"),
+    invoices: data.invoices.filter((item) => item.customerId === customerId && item.status !== "DRAFT"),
+    payments: data.payments.filter((item) => item.customerName === data.customers.find((customer) => customer.id === customerId)?.name),
+    discounts: [],
+    billingRuns: [],
+    users: data.users.filter((item) => item.id === userId),
+    // Keep only plans/products referenced by the customer's subscriptions plus active catalogue entries.
+    plans: data.plans.filter((item) => item.status === "ACTIVE" || subscriptionIds.has(item.id)),
+  };
+}
+
 function getRelations(data = loadMockData()) {
   return {
     data,
@@ -141,6 +174,16 @@ export const mockApi: ApiClient = {
       };
 
       data.users.push(user);
+      data.customers.push({
+        id: customerIdForUser(user.id),
+        name: user.name,
+        legalName: user.name,
+        email: user.email,
+        status: "ACTIVE",
+        createdAt: user.createdAt,
+        activeSubscriptions: 0,
+        outstandingAmount: 0,
+      });
       saveMockData(data);
       return toPublicUser(user) as AuthUser;
     },
@@ -158,7 +201,7 @@ export const mockApi: ApiClient = {
   users: {
     async list() {
       await wait();
-      return loadMockData().users.map(toPublicUser);
+      return scopeData().users.map(toPublicUser);
     },
 
     async create(input: CreateUserInput) {
@@ -243,7 +286,10 @@ export const mockApi: ApiClient = {
   products: {
     async list() {
       await wait();
-      return loadMockData().products;
+      const data = scopeData();
+      return currentSession()?.role === "CUSTOMER"
+        ? data.products.filter((product) => product.status === "ACTIVE")
+        : data.products;
     },
 
     async create(input: CreateProductInput) {
@@ -294,7 +340,7 @@ export const mockApi: ApiClient = {
   plans: {
     async list() {
       await wait();
-      const data = loadMockData();
+      const data = scopeData();
       return data.plans.map((plan) => toPlanWithProduct(plan.id, data));
     },
 
@@ -358,7 +404,7 @@ export const mockApi: ApiClient = {
   subscriptions: {
     async list() {
       await wait();
-      const data = loadMockData();
+      const data = scopeData();
       return [...data.subscriptions]
         .sort(
           (a, b) =>
@@ -371,14 +417,22 @@ export const mockApi: ApiClient = {
 
     async get(id: string) {
       await wait();
-      return toSubscriptionWithRelations(id);
+      const data = scopeData();
+      return toSubscriptionWithRelations(id, data);
     },
 
     async create(input: CreateSubscriptionInput) {
       await wait();
       const data = loadMockData();
+      const session = currentSession();
+      if (session?.role === "CUSTOMER") {
+        throw new ApiError("Customers cannot create subscriptions from this workspace.", 403, "FORBIDDEN");
+      }
+      const requestedUserId = input.customerId.startsWith("cus_")
+        ? `usr_${input.customerId.slice(4)}`
+        : input.customerId;
       const user = requireRelation(
-        data.users.find((item) => item.id === input.userId),
+        data.users.find((item) => item.id === requestedUserId),
         "User",
       );
       const plan = requireRelation(
@@ -394,10 +448,10 @@ export const mockApi: ApiClient = {
         id: createId("sub"),
         userId: user.id,
         planId: plan.id,
-        status: input.status,
-        currentPeriodStart: start.toISOString(),
-        currentPeriodEnd: nextPeriodEnd(start, plan.interval),
-        cancelAtPeriodEnd: false,
+         status: input.status ?? "ACTIVE",
+         currentPeriodStart: input.startDate ? new Date(input.startDate).toISOString() : start.toISOString(),
+         currentPeriodEnd: input.endDate ? new Date(input.endDate).toISOString() : nextPeriodEnd(start, plan.interval),
+         cancelAtPeriodEnd: input.autoRenew === false,
         createdAt: start.toISOString(),
       };
 
@@ -410,6 +464,13 @@ export const mockApi: ApiClient = {
     async update(id: string, input: UpdateSubscriptionInput) {
       await wait();
       const data = loadMockData();
+      const session = currentSession();
+      if (session?.role === "CUSTOMER") {
+        const subscription = data.subscriptions.find((item) => item.id === id);
+        if (!subscription || subscription.userId !== session.id) {
+          throw new ApiError("Subscription was not found.", 404, "NOT_FOUND");
+        }
+      }
       const index = data.subscriptions.findIndex((item) => item.id === id);
 
       if (index === -1) {
@@ -425,7 +486,7 @@ export const mockApi: ApiClient = {
   operations: {
     async snapshot(): Promise<OperationsSnapshot> {
       await wait();
-      const data = loadMockData();
+      const data = scopeData();
       const revenueCollected = data.invoices.reduce(
         (total, invoice) => total + invoice.paidAmount,
         0,

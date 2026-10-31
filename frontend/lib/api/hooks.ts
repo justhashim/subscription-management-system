@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { api } from "./index";
+import { useAuth } from "@/lib/auth/auth-provider";
 import type {
   CreatePlanInput,
   CreateProductInput,
@@ -26,40 +27,73 @@ export const queryKeys = {
   operations: ["operations"] as const,
 };
 
+/**
+ * Data returned by the API is identity-dependent. Keeping the identity in
+ * each read query key prevents a customer who signs out and another user who
+ * signs in on the same tab from seeing the previous user's cached response.
+ * The unscoped keys above are intentionally kept as invalidation prefixes for
+ * mutations.
+ */
+function userQueryKey(key: readonly string[], userId?: string, role?: string) {
+  return [...key, "identity", userId ?? "anonymous", role ?? "anonymous"];
+}
+
+function useIdentity() {
+  const { user, loading } = useAuth();
+  return { user, loading, enabled: !loading && Boolean(user) };
+}
+
 export function useUsers() {
-  return useQuery({ queryKey: queryKeys.users, queryFn: api.users.list });
+  const { user, enabled } = useIdentity();
+  return useQuery({
+    queryKey: userQueryKey(queryKeys.users, user?.id, user?.role),
+    queryFn: api.users.list,
+    enabled,
+  });
 }
 
 export function useOperationsSnapshot() {
+  const { user, enabled } = useIdentity();
   return useQuery({
-    queryKey: queryKeys.operations,
+    queryKey: userQueryKey(queryKeys.operations, user?.id, user?.role),
     queryFn: api.operations.snapshot,
+    enabled,
   });
 }
 
 export function useProducts() {
+  const { user, enabled } = useIdentity();
   return useQuery({
-    queryKey: queryKeys.products,
+    queryKey: userQueryKey(queryKeys.products, user?.id, user?.role),
     queryFn: api.products.list,
+    enabled,
   });
 }
 
 export function usePlans() {
-  return useQuery({ queryKey: queryKeys.plans, queryFn: api.plans.list });
+  const { user, enabled } = useIdentity();
+  return useQuery({
+    queryKey: userQueryKey(queryKeys.plans, user?.id, user?.role),
+    queryFn: api.plans.list,
+    enabled,
+  });
 }
 
 export function useSubscriptions() {
+  const { user, enabled } = useIdentity();
   return useQuery({
-    queryKey: queryKeys.subscriptions,
+    queryKey: userQueryKey(queryKeys.subscriptions, user?.id, user?.role),
     queryFn: api.subscriptions.list,
+    enabled,
   });
 }
 
 export function useSubscription(id: string) {
+  const { user, enabled } = useIdentity();
   return useQuery({
-    queryKey: queryKeys.subscription(id),
+    queryKey: userQueryKey(queryKeys.subscription(id), user?.id, user?.role),
     queryFn: () => api.subscriptions.get(id),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && enabled,
   });
 }
 

@@ -41,14 +41,31 @@ const productSchema = z.object({
     .min(10, "Add a short description of at least 10 characters.")
     .max(240, "Description is too long."),
   status: z.enum(["ACTIVE", "ARCHIVED"]),
+  type: z.enum(["SERVICE", "GOODS"]),
+  salesPrice: z.number().min(0),
+  costPrice: z.number().min(0),
+  taxRate: z.number().min(0).max(100),
+  variants: z.string().max(1000),
 });
 
 type ProductValues = z.infer<typeof productSchema>;
+
+function parseVariants(value: string) {
+  return value.split("\n").map((line) => {
+    const [name, adjustment = "0"] = line.split(":");
+    return { name: name.trim(), priceAdjustment: Math.round(Number(adjustment.trim()) * 100) };
+  }).filter((variant) => variant.name);
+}
 
 const defaults: ProductValues = {
   name: "",
   description: "",
   status: "ACTIVE",
+  type: "SERVICE",
+  salesPrice: 0,
+  costPrice: 0,
+  taxRate: 0,
+  variants: "",
 };
 
 export function ProductDialog({
@@ -74,7 +91,12 @@ export function ProductDialog({
       ? {
           name: product.name,
           description: product.description,
-          status: product.status,
+           status: product.status,
+          type: product.type ?? "SERVICE",
+          salesPrice: (product.salesPrice ?? 0) / 100,
+          costPrice: (product.costPrice ?? 0) / 100,
+          taxRate: product.taxRate ?? 0,
+          variants: (product.variants ?? []).map((variant) => `${variant.name}:${variant.priceAdjustment / 100}`).join("\n"),
         }
       : defaults,
   });
@@ -84,10 +106,10 @@ export function ProductDialog({
 
     try {
       if (product) {
-        await updateProduct.mutateAsync({ id: product.id, input: values });
+        await updateProduct.mutateAsync({ id: product.id, input: { ...values, salesPrice: Math.round(values.salesPrice * 100), costPrice: Math.round(values.costPrice * 100), variants: parseVariants(values.variants) } });
         toast.success("Product updated.");
       } else {
-        await createProduct.mutateAsync(values);
+        await createProduct.mutateAsync({ ...values, salesPrice: Math.round(values.salesPrice * 100), costPrice: Math.round(values.costPrice * 100), variants: parseVariants(values.variants) });
         toast.success("Product created.");
       }
 
@@ -156,6 +178,19 @@ export function ProductDialog({
               )}
             />
           </Field>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Type" error={errors.type?.message}>
+              <Controller control={control} name="type" render={({ field }) => <Select value={field.value} onValueChange={field.onChange}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SERVICE">Service</SelectItem><SelectItem value="GOODS">Goods</SelectItem></SelectContent></Select>} />
+            </Field>
+            <Field label="Sales price" hint="Major units" error={errors.salesPrice?.message}><Input type="number" min="0" step="0.01" {...register("salesPrice", { valueAsNumber: true })} /></Field>
+            <Field label="Cost price" hint="Major units" error={errors.costPrice?.message}><Input type="number" min="0" step="0.01" {...register("costPrice", { valueAsNumber: true })} /></Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Tax rate" hint="Percentage" error={errors.taxRate?.message}><Input type="number" min="0" max="100" step="0.01" {...register("taxRate", { valueAsNumber: true })} /></Field>
+            <Field label="Variants" hint="One per line: Name:price adjustment" error={errors.variants?.message}><Textarea rows={3} placeholder="Odoo:560\nEnterprise:1200" {...register("variants")} /></Field>
+          </div>
 
           <DialogFooter>
             <Button

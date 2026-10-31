@@ -37,6 +37,12 @@ export interface Product {
   costPrice?: number;
   notes?: string;
   taxRate?: number;
+  variants?: ProductVariant[];
+}
+
+export interface ProductVariant {
+  name: string;
+  priceAdjustment: number;
 }
 
 export interface Plan {
@@ -246,6 +252,7 @@ export interface CreateProductInput {
   costPrice?: number;
   notes?: string;
   taxRate?: number;
+  variants?: ProductVariant[];
 }
 
 export type UpdateProductInput = Partial<CreateProductInput>;
@@ -266,19 +273,33 @@ export interface CreatePlanInput {
   canCloseEarly?: boolean;
   autoClose?: boolean;
   canRenew?: boolean;
+  includedProducts?: PlanIncludedProduct[];
+}
+
+export interface PlanIncludedProduct {
+  productId: string;
+  variantName?: string | null;
+  quantity: number;
 }
 
 export type UpdatePlanInput = Partial<CreatePlanInput>;
 
 export interface CreateSubscriptionInput {
-  userId: string;
+  customerId: string;
   planId: string;
-  status: SubscriptionStatus;
+  startDate: string;
+  endDate?: string | null;
+  autoRenew?: boolean;
+  status?: SubscriptionStatus;
 }
 
 export type UpdateSubscriptionInput = Partial<
   Pick<Subscription, "status" | "cancelAtPeriodEnd">
->;
+> & {
+  startDate?: string;
+  endDate?: string | null;
+  autoRenew?: boolean;
+};
 
 export interface ApiErrorBody {
   error: {

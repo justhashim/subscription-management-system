@@ -144,6 +144,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "status", header: "Stage", cell: (quote) => <StatusBadge status={quote.status} /> },
       { id: "valid", header: "Valid until", cell: (quote) => <span className="text-muted-foreground">{formatDate(quote.validUntil)}</span> },
       { id: "total", header: "Total", cell: (quote) => <span className="font-medium tabular-nums">{formatCurrency(quote.total, "USD")}</span> },
+      { id: "actions", header: "", className: "w-40", cell: (quote) => <OperationActionButton mode="quote" id={quote.id} status={quote.status} /> },
     ];
     return <OperationsTable mode="quotes" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "QUOTATION", "ACCEPTED", "EXPIRED", "CANCELED"]} count={`${rows.length} of ${snapshot.quotes.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={FileCheck2} emptyTitle="No quotations found" actionLabel="New quotation" admin={isAdmin || isStaff} />;
   }
@@ -159,6 +160,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "status", header: "Status", cell: (invoice) => <StatusBadge status={invoice.status} /> },
       { id: "due", header: "Due", cell: (invoice) => <span className="text-muted-foreground">{formatDate(invoice.dueDate)}</span>, className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
       { id: "total", header: "Balance", cell: (invoice) => <div><p className="font-medium tabular-nums">{formatCurrency(invoice.total - invoice.paidAmount, "USD")}</p><p className="text-xs text-muted-foreground">of {formatCurrency(invoice.total, "USD")}</p></div> },
+      { id: "actions", header: "", className: "w-48", cell: (invoice) => <OperationActionButton mode="invoice" id={invoice.id} status={invoice.status} /> },
     ];
     return <OperationsTable mode="invoices" snapshot={snapshot} heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "CONFIRMED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELED"]} count={`${rows.length} of ${snapshot.invoices.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={ReceiptText} emptyTitle="No invoices found" actionLabel="Create invoice" admin={isAdmin || isStaff} />;
   }
@@ -229,6 +231,7 @@ function OperationCreateDialog({ mode, snapshot, open, onOpenChange, onCreated }
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [amount, setAmount] = useState("10000");
+  const [quantity, setQuantity] = useState("1");
   const [code, setCode] = useState("");
   const [customerId, setCustomerId] = useState(snapshot.customers[0]?.id ?? "");
   const products = loadMockData().products;
@@ -254,11 +257,18 @@ function OperationCreateDialog({ mode, snapshot, open, onOpenChange, onCreated }
       } else if (!customer || !product) {
         throw new Error("Create a customer and product first.");
       } else if (mode === "quotes") {
-        const total = Math.max(0, Number(amount) || product.salesPrice || 0);
-        data.quotes.unshift({ id: createId("quo"), number: `QUO/${now.getFullYear()}/NEW`, customerId: customer.id, customerName: customer.name, templateName: "Quick quote", status: "DRAFT", validUntil: future, total, createdAt: now.toISOString(), lines: [{ id: createId("ql"), description: product.name, quantity: 1, unitPrice: total, taxRate: product.taxRate ?? 0, amount: total }] });
+        const unitPrice = Math.max(0, Number(amount) || product.salesPrice || 0);
+        const lineSubtotal = unitPrice * Math.max(1, Number(quantity) || 1);
+        const taxAmount = Math.round(lineSubtotal * (product.taxRate ?? 0) / 100);
+        const total = lineSubtotal + taxAmount;
+        data.quotes.unshift({ id: createId("quo"), number: `QUO/${now.getFullYear()}/NEW-${data.quotes.length + 1}`, customerId: customer.id, customerName: customer.name, templateName: "Quick quote", status: "DRAFT", validUntil: future, total, createdAt: now.toISOString(), lines: [{ id: createId("ql"), description: product.name, quantity: Math.max(1, Number(quantity) || 1), unitPrice, taxRate: product.taxRate ?? 0, amount: total }] });
       } else if (mode === "invoices") {
-        const total = Math.max(0, Number(amount) || product.salesPrice || 0);
-        data.invoices.unshift({ id: createId("inv"), number: `INV/${now.getFullYear()}/NEW`, customerId: customer.id, customerName: customer.name, status: "DRAFT", issueDate: now.toISOString(), dueDate: future, subtotal: total, taxAmount: 0, discountAmount: 0, total, paidAmount: 0, lines: [{ id: createId("line"), description: product.name, quantity: 1, unitPrice: total, taxRate: 0, taxAmount: 0, amount: total }] });
+        const unitPrice = Math.max(0, Number(amount) || product.salesPrice || 0);
+        const lineQuantity = Math.max(1, Number(quantity) || 1);
+        const subtotal = unitPrice * lineQuantity;
+        const taxAmount = Math.round(subtotal * (product.taxRate ?? 0) / 100);
+        const total = subtotal + taxAmount;
+        data.invoices.unshift({ id: createId("inv"), number: `INV/${now.getFullYear()}/NEW-${data.invoices.length + 1}`, customerId: customer.id, customerName: customer.name, status: "DRAFT", issueDate: now.toISOString(), dueDate: future, subtotal, taxAmount, discountAmount: 0, total, paidAmount: 0, lines: [{ id: createId("line"), description: product.name, quantity: lineQuantity, unitPrice, taxRate: product.taxRate ?? 0, taxAmount, amount: total }] });
       } else if (mode === "payments") {
         const invoice = data.invoices.find((item) => item.id === invoiceId) ?? data.invoices.find((item) => item.status !== "PAID" && item.status !== "CANCELED");
         if (!invoice) throw new Error("Create an invoice first.");
@@ -273,7 +283,7 @@ function OperationCreateDialog({ mode, snapshot, open, onOpenChange, onCreated }
       onCreated();
       toast.success(`${titles[mode]} created.`);
       onOpenChange(false);
-      setName(""); setEmail(""); setCode("");
+      setName(""); setEmail(""); setCode(""); setQuantity("1");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The record could not be created.");
     } finally {
@@ -281,7 +291,46 @@ function OperationCreateDialog({ mode, snapshot, open, onOpenChange, onCreated }
     }
   }
 
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{titles[mode]}</DialogTitle><DialogDescription>{descriptions[mode]}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{mode === "customers" ? <><div className="space-y-2"><Label htmlFor="customer-name">Name</Label><Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme Labs" required /></div><div className="space-y-2"><Label htmlFor="customer-email">Email</Label><Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="billing@acme.test" required /></div></> : null}{["quotes", "invoices"].includes(mode) ? <><div className="space-y-2"><Label>Customer</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{snapshot.customers.map((item) => <SelectItem key={item.id} value={item.id}>{item.name} · {item.email}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Product</Label><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger><SelectContent>{products.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div></> : null}{mode === "payments" ? <><div className="space-y-2"><Label>Invoice</Label><Select value={invoiceId} onValueChange={setInvoiceId}><SelectTrigger><SelectValue placeholder="Select invoice" /></SelectTrigger><SelectContent>{snapshot.invoices.filter((item) => item.status !== "PAID" && item.status !== "CANCELED").map((item) => <SelectItem key={item.id} value={item.id}>{item.number} · {item.customerName}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Payment method</Label><Select value={method} onValueChange={(value) => setMethod(value as Payment["method"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ONLINE", "CARD", "UPI", "BANK_TRANSFER", "CASH", "CHEQUE"].map((item) => <SelectItem key={item} value={item}>{item.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div></> : null}{mode === "discounts" ? <><div className="space-y-2"><Label htmlFor="discount-name">Name</Label><Input id="discount-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Launch discount" required /></div><div className="space-y-2"><Label htmlFor="discount-code">Code</Label><Input id="discount-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="LAUNCH20" required /></div></> : null}{["quotes", "invoices", "payments", "discounts"].includes(mode) ? <div className="space-y-2"><Label htmlFor="record-amount">{mode === "discounts" ? "Percentage" : "Amount"}</Label><Input id="record-amount" type="number" min="1" max={mode === "discounts" ? 100 : undefined} value={amount} onChange={(event) => setAmount(event.target.value)} /></div> : null}<DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Create"}</Button></DialogFooter></form></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{titles[mode]}</DialogTitle><DialogDescription>{descriptions[mode]}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{mode === "customers" ? <><div className="space-y-2"><Label htmlFor="customer-name">Name</Label><Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme Labs" required /></div><div className="space-y-2"><Label htmlFor="customer-email">Email</Label><Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="billing@acme.test" required /></div></> : null}{["quotes", "invoices"].includes(mode) ? <><div className="space-y-2"><Label>Customer</Label><Select value={customerId} onValueChange={setCustomerId}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{snapshot.customers.map((item) => <SelectItem key={item.id} value={item.id}>{item.name} · {item.email}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Product</Label><Select value={productId} onValueChange={setProductId}><SelectTrigger><SelectValue placeholder="Select product" /></SelectTrigger><SelectContent>{products.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}</SelectContent></Select></div></> : null}{mode === "payments" ? <><div className="space-y-2"><Label>Invoice</Label><Select value={invoiceId} onValueChange={setInvoiceId}><SelectTrigger><SelectValue placeholder="Select invoice" /></SelectTrigger><SelectContent>{snapshot.invoices.filter((item) => item.status !== "PAID" && item.status !== "CANCELED").map((item) => <SelectItem key={item.id} value={item.id}>{item.number} · {item.customerName}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Payment method</Label><Select value={method} onValueChange={(value) => setMethod(value as Payment["method"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["ONLINE", "CARD", "UPI", "BANK_TRANSFER", "CASH", "CHEQUE"].map((item) => <SelectItem key={item} value={item}>{item.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div></> : null}{mode === "discounts" ? <><div className="space-y-2"><Label htmlFor="discount-name">Name</Label><Input id="discount-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Launch discount" required /></div><div className="space-y-2"><Label htmlFor="discount-code">Code</Label><Input id="discount-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="LAUNCH20" required /></div></> : null}{["quotes", "invoices", "payments", "discounts"].includes(mode) ? <div className="space-y-2"><Label htmlFor="record-amount">{mode === "discounts" ? "Percentage" : "Amount"}</Label><Input id="record-amount" type="number" min="1" max={mode === "discounts" ? 100 : undefined} value={amount} onChange={(event) => setAmount(event.target.value)} /></div> : null}{["quotes", "invoices"].includes(mode) ? <div className="space-y-2"><Label htmlFor="record-quantity">Quantity</Label><Input id="record-quantity" type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></div> : null}<DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Create"}</Button></DialogFooter></form></DialogContent></Dialog>;
+}
+
+function OperationActionButton({ mode, id, status }: { mode: "quote" | "invoice"; id: string; status: string }) {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const action = mode === "quote"
+    ? status === "DRAFT" ? "Send" : status === "QUOTATION" ? "Accept" : null
+    : status === "DRAFT" ? "Confirm" : status === "CONFIRMED" || status === "ISSUED" ? "Cancel" : null;
+  if (!action) return null;
+  const actionText = action;
+
+  async function run() {
+    setBusy(true);
+    try {
+      if (!USE_MOCKS) {
+        toast.info("This lifecycle action requires the connected operations API.");
+        return;
+      }
+      const data = loadMockData();
+      if (mode === "quote") {
+        const quote = data.quotes.find((item) => item.id === id);
+        if (!quote) throw new Error("Quotation not found.");
+        quote.status = quote.status === "DRAFT" ? "QUOTATION" : "ACCEPTED";
+      } else {
+        const invoice = data.invoices.find((item) => item.id === id);
+        if (!invoice) throw new Error("Invoice not found.");
+        invoice.status = invoice.status === "DRAFT" ? "CONFIRMED" : "CANCELED";
+      }
+      saveMockData(data);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.operations });
+       toast.success(`${mode === "quote" ? "Quotation" : "Invoice"} ${actionText.toLowerCase()}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The action could not be completed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <Button type="button" variant="outline" size="sm" onClick={() => void run()} disabled={busy}>{busy ? "…" : actionText}</Button>;
 }
 
 function BillingView({ heading, search, setSearch, rows, columns, isAdmin }: { heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; rows: BillingRun[]; columns: DataColumn<BillingRun>[]; isAdmin: boolean }) {

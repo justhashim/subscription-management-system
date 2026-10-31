@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-provider";
 import { Logo } from "./logo";
+import { BrandLoader } from "@/components/shared/brand-loader";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { getInitials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +52,7 @@ interface NavItem {
   icon: LucideIcon;
   adminOnly?: boolean;
   customerOnly?: boolean;
+  staffOnly?: boolean;
 }
 
 interface NavGroup {
@@ -92,17 +93,17 @@ const navigation: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { href: "/customers", label: "Customers", icon: Users },
-      { href: "/quotations", label: "Quotations", icon: FileCheck2 },
-      { href: "/invoices", label: "Invoices", icon: ReceiptText },
-      { href: "/payments", label: "Payments", icon: WalletCards },
+      { href: "/customers", label: "Customers", icon: Users, staffOnly: true },
+      { href: "/quotations", label: "Quotations", icon: FileCheck2, staffOnly: true },
+      { href: "/invoices", label: "Invoices", icon: ReceiptText, staffOnly: true },
+      { href: "/payments", label: "Payments", icon: WalletCards, staffOnly: true },
     ],
   },
   {
     label: "Finance",
     items: [
-      { href: "/billing", label: "Billing runs", icon: RefreshCw },
-      { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/billing", label: "Billing runs", icon: RefreshCw, staffOnly: true },
+      { href: "/reports", label: "Reports", icon: BarChart3, staffOnly: true },
       { href: "/discounts", label: "Discounts", icon: Sparkles, adminOnly: true },
     ],
   },
@@ -138,11 +139,13 @@ function NavigationLinks({
   pathname,
   isAdmin,
   isCustomer,
+  isStaff,
   onNavigate,
 }: {
   pathname: string;
   isAdmin: boolean;
   isCustomer: boolean;
+  isStaff: boolean;
   onNavigate?: () => void;
 }) {
   return (
@@ -154,7 +157,8 @@ function NavigationLinks({
         const items = group.items.filter(
           (item) =>
             (!item.adminOnly || isAdmin) &&
-            (!item.customerOnly || isCustomer),
+            (!item.customerOnly || isCustomer) &&
+            (!item.staffOnly || isStaff),
         );
 
         if (items.length === 0) {
@@ -203,7 +207,7 @@ function NavigationLinks({
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { user, loading, isAdmin, isCustomer, logout } = useAuth();
+  const { user, loading, isAdmin, isStaff, isCustomer, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -222,12 +226,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   if (loading || !user) {
     return (
       <div className="flex min-h-svh items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex size-12 animate-pulse items-center justify-center rounded-2xl bg-primary/10">
-            <span className="size-5 rounded-md bg-primary/40" />
-          </div>
-          <Skeleton className="h-3 w-28" />
-        </div>
+        <BrandLoader />
       </div>
     );
   }
@@ -244,7 +243,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <div className="flex h-16 items-center border-b px-5">
           <Logo />
         </div>
-        <NavigationLinks pathname={pathname} isAdmin={isAdmin} isCustomer={isCustomer} />
+         <NavigationLinks pathname={pathname} isAdmin={isAdmin} isStaff={isStaff} isCustomer={isCustomer} />
       </aside>
 
       <div className="lg:pl-64">
@@ -269,6 +268,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <NavigationLinks
                 pathname={pathname}
                 isAdmin={isAdmin}
+                isStaff={isStaff}
                 isCustomer={isCustomer}
                 onNavigate={() => setMobileOpen(false)}
               />

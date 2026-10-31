@@ -18,6 +18,10 @@ const protectedRoutes = [
   "/portal",
 ];
 const authRoutes = ["/login", "/register"];
+const staffRoutes = [
+  "/users", "/customers", "/quotations", "/invoices", "/payments",
+  "/billing", "/discounts", "/reports",
+];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -42,6 +46,13 @@ export function proxy(request: NextRequest) {
 
   if (session && pathname.startsWith("/users") && session.role !== "ADMIN") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (
+    session?.role === "CUSTOMER" &&
+    staffRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  ) {
+    return NextResponse.redirect(new URL("/portal", request.url));
   }
 
   return NextResponse.next();

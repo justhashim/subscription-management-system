@@ -46,6 +46,14 @@ const planSchema = z.object({
   interval: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
   features: z.string().max(1000, "Features are too long."),
   status: z.enum(["ACTIVE", "ARCHIVED"]),
+  minimumQuantity: z.number().int().min(1),
+  availableFrom: z.string().optional(),
+  availableUntil: z.string().optional(),
+  canPause: z.boolean(),
+  canCloseEarly: z.boolean(),
+  autoClose: z.boolean(),
+  canRenew: z.boolean(),
+  includedQuantity: z.number().int().min(1),
 });
 
 type PlanValues = z.infer<typeof planSchema>;
@@ -75,6 +83,14 @@ export function PlanDialog({
     interval: "MONTHLY",
     features: "",
     status: "ACTIVE",
+    minimumQuantity: 1,
+    availableFrom: "",
+    availableUntil: "",
+    canPause: true,
+    canCloseEarly: true,
+    autoClose: false,
+    canRenew: true,
+    includedQuantity: 1,
   };
   const {
     register,
@@ -93,6 +109,14 @@ export function PlanDialog({
           interval: plan.interval,
           features: plan.features.join("\n"),
           status: plan.status,
+          minimumQuantity: plan.minimumQuantity ?? 1,
+          availableFrom: plan.availableFrom ?? "",
+          availableUntil: plan.availableUntil ?? "",
+          canPause: plan.canPause ?? true,
+          canCloseEarly: plan.canCloseEarly ?? true,
+          autoClose: plan.autoClose ?? false,
+          canRenew: plan.canRenew ?? true,
+          includedQuantity: plan.product ? 1 : 1,
         }
       : defaults,
   });
@@ -112,6 +136,14 @@ export function PlanDialog({
         .map((feature) => feature.trim())
         .filter(Boolean),
       status: values.status,
+      minimumQuantity: values.minimumQuantity,
+      availableFrom: values.availableFrom || undefined,
+      availableUntil: values.availableUntil || undefined,
+      canPause: values.canPause,
+      canCloseEarly: values.canCloseEarly,
+      autoClose: values.autoClose,
+      canRenew: values.canRenew,
+      includedProducts: [{ productId: values.productId, quantity: values.includedQuantity }],
     };
 
     try {
@@ -213,6 +245,16 @@ export function PlanDialog({
               {...register("description")}
             />
           </Field>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Minimum quantity" error={errors.minimumQuantity?.message}><Input type="number" min="1" {...register("minimumQuantity", { valueAsNumber: true })} /></Field>
+            <Field label="Included quantity" error={errors.includedQuantity?.message}><Input type="number" min="1" {...register("includedQuantity", { valueAsNumber: true })} /></Field>
+            <Field label="Available from" error={errors.availableFrom?.message}><Input type="date" {...register("availableFrom")} /></Field>
+          </div>
+          <Field label="Available until" error={errors.availableUntil?.message}><Input type="date" {...register("availableUntil")} /></Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {([["canPause", "Allow pause"], ["canCloseEarly", "Allow early close"], ["autoClose", "Close automatically"], ["canRenew", "Allow renewal"]] as const).map(([name, label]) => <label key={name} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-primary" {...register(name)} />{label}</label>)}
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field
