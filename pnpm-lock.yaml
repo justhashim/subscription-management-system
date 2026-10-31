@@ -164,7 +164,7 @@ settings:
 
 importers:
 
-  .:
+  frontend:
     dependencies:
       next:
         specifier: 16.4.3
