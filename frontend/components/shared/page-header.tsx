@@ -17,12 +17,12 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-5 border-b-2 border-foreground pb-5 sm:flex-row sm:items-end sm:justify-between",
+        "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
         className,
       )}
     >
       <div className="space-y-1.5">
-        <h1 className="font-mono text-[1.65rem] font-bold tracking-[-0.04em] text-foreground uppercase sm:text-[1.9rem]">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.7rem]">
           {title}
         </h1>
         {description ? (

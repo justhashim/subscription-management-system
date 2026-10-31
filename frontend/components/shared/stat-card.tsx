@@ -3,10 +3,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const toneStyles = {
-  indigo: "bg-primary text-primary-foreground",
-  emerald: "bg-foreground text-background",
-  amber: "bg-primary text-primary-foreground",
-  sky: "bg-foreground text-background",
+  indigo:
+    "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300",
+  emerald:
+    "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300",
+  amber:
+    "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300",
+  sky: "bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300",
 };
 
 export function StatCard({
@@ -23,8 +26,8 @@ export function StatCard({
   tone?: keyof typeof toneStyles;
 }) {
   return (
-    <Card className="shadow-none transition-colors hover:border-primary">
-      <CardContent className="flex items-start justify-between gap-4 p-4 sm:p-5">
+    <Card className="shadow-xs transition-shadow hover:shadow-sm">
+      <CardContent className="flex items-start justify-between gap-4 p-5">
         <div className="space-y-3">
           <p className="text-sm font-medium text-muted-foreground">{label}</p>
           <div>
@@ -34,7 +37,7 @@ export function StatCard({
         </div>
         <div
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-lg",
+            "flex size-10 shrink-0 items-center justify-center rounded-xl",
             toneStyles[tone],
           )}
         >

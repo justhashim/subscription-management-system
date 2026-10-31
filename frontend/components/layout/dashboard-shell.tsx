@@ -163,7 +163,7 @@ function NavigationLinks({
 
         return (
           <div key={group.label}>
-            <p className="px-2 pb-2 font-mono text-[10px] font-semibold tracking-[0.16em] text-muted-foreground/80 uppercase">
+            <p className="px-2 pb-2 text-[10px] font-semibold tracking-widest text-muted-foreground/70 uppercase">
               {group.label}
             </p>
             <div className="space-y-1">
@@ -177,9 +177,9 @@ function NavigationLinks({
                     href={item.href}
                     onClick={onNavigate}
                     className={cn(
-                      "flex min-h-10 items-center gap-2.5 border-l-2 border-transparent px-2.5 py-2 font-mono text-xs font-medium uppercase transition-colors",
+                      "flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                       active
-                         ? "border-primary bg-sidebar-accent text-sidebar-accent-foreground"
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-xs"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                     )}
                     aria-current={active ? "page" : undefined}
@@ -241,12 +241,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-sidebar lg:flex">
-        <div className="flex h-16 items-center border-b-2 border-sidebar-border px-5">
+        <div className="flex h-16 items-center border-b px-5">
           <Logo />
         </div>
         <NavigationLinks pathname={pathname} isAdmin={isAdmin} isCustomer={isCustomer} />
         <div className="border-t p-3">
-            <div className="border-t border-sidebar-border pt-3">
+          <div className="rounded-xl bg-sidebar-accent/60 p-3">
             <div className="flex items-center gap-2 text-xs font-medium text-sidebar-accent-foreground">
               <ShieldCheck className="size-3.5" />
               Demo workspace
@@ -259,7 +259,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/95 px-4 sm:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-md sm:px-6">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button
@@ -292,7 +292,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-1.5">
-             <Badge variant="outline" className="hidden border-primary/25 bg-primary/5 text-primary sm:inline-flex">
+            <Badge
+              variant="outline"
+              className="hidden border-indigo-200 bg-indigo-50 text-indigo-700 sm:inline-flex dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300"
+            >
               {isAdmin ? "Admin access" : user.role === "STAFF" ? "Internal staff access" : "Customer access"}
             </Badge>
             <ThemeToggle />
