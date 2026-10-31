@@ -252,8 +252,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
-        <Card className="shadow-xs">
+      <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+        <Card className="shadow-none">
           <CardHeader className="flex flex-row items-start justify-between gap-4 border-b">
             <div>
               <CardTitle className="text-base">
@@ -309,7 +309,7 @@ export default function DashboardPage() {
         </Card>
 
         <div className="space-y-5">
-          <Card className="shadow-xs">
+          <Card className="shadow-none">
             <CardHeader>
               <CardTitle className="text-base">Status breakdown</CardTitle>
               <CardDescription>
@@ -346,7 +346,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border-indigo-100 bg-gradient-to-br from-indigo-50 via-background to-violet-50 shadow-xs dark:border-indigo-500/20 dark:from-indigo-500/10 dark:via-card dark:to-violet-500/5">
+          <Card className="overflow-hidden border-primary/20 bg-primary/[0.035] shadow-none dark:bg-primary/[0.06]">
             <CardHeader>
               <CardTitle className="text-base">Quick actions</CardTitle>
               <CardDescription>

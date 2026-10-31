@@ -48,19 +48,19 @@ export function DataTable<T>({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border bg-card shadow-xs",
+        "overflow-hidden border border-foreground/80 bg-card",
         className,
       )}
     >
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
+              <TableRow className="border-b-2 border-foreground/80 bg-muted/50 hover:bg-muted/50">
               {columns.map((column) => (
                 <TableHead
                   key={column.id}
                   className={cn(
-                    "h-10 whitespace-nowrap text-xs font-medium tracking-wide text-muted-foreground uppercase",
+                    "h-10 whitespace-nowrap font-mono text-[10px] font-bold tracking-[0.12em] text-muted-foreground uppercase",
                     column.headerClassName,
                   )}
                 >
@@ -101,8 +101,8 @@ export function DataTable<T>({
                         : undefined
                     }
                     className={cn(
-                      "group",
-                      onRowClick && "cursor-pointer hover:bg-muted/50",
+                        "group border-b border-border/80 last:border-b-0",
+                        onRowClick && "cursor-pointer hover:bg-primary/5",
                     )}
                   >
                     {columns.map((column) => (
