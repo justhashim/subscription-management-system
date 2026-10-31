@@ -20,7 +20,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth/auth-provider";
-import { useOperationsSnapshot, useSubscriptions } from "@/lib/api/hooks";
+import { queryKeys, useOperationsSnapshot, useSubscriptions } from "@/lib/api/hooks";
+import { useQueryClient } from "@tanstack/react-query";
+import { loadMockData, saveMockData, createId } from "@/lib/mock/store";
+import { USE_MOCKS } from "@/lib/api";
 import type {
   BillingRun,
   Customer,
@@ -40,6 +43,16 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -71,7 +84,7 @@ const headings: Record<OperationsMode, { title: string; description: string }> =
 };
 
 export function OperationsView({ mode }: { mode: OperationsMode }) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isStaff } = useAuth();
   const snapshotQuery = useOperationsSnapshot();
   const subscriptionsQuery = useSubscriptions();
   const [search, setSearch] = useState("");
@@ -117,7 +130,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "outstanding", header: "Outstanding", cell: (customer) => <span className="font-medium tabular-nums">{formatCurrency(customer.outstandingAmount, "USD")}</span> },
       { id: "created", header: "Customer since", cell: (customer) => <span className="text-muted-foreground">{formatDate(customer.createdAt)}</span>, className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
     ];
-    return <OperationsTable heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["ACTIVE", "INACTIVE", "PROSPECT"]} count={`${rows.length} of ${snapshot.customers.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Users} emptyTitle="No customers found" actionLabel="Add customer" admin={isAdmin} />;
+    return <OperationsTable mode="customers" heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["ACTIVE", "INACTIVE", "PROSPECT"]} count={`${rows.length} of ${snapshot.customers.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Users} emptyTitle="No customers found" actionLabel="Add customer" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "quotes") {
@@ -132,7 +145,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "valid", header: "Valid until", cell: (quote) => <span className="text-muted-foreground">{formatDate(quote.validUntil)}</span> },
       { id: "total", header: "Total", cell: (quote) => <span className="font-medium tabular-nums">{formatCurrency(quote.total, "USD")}</span> },
     ];
-    return <OperationsTable heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "QUOTATION", "ACCEPTED", "EXPIRED", "CANCELED"]} count={`${rows.length} of ${snapshot.quotes.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={FileCheck2} emptyTitle="No quotations found" actionLabel="New quotation" admin={isAdmin} />;
+    return <OperationsTable mode="quotes" heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "QUOTATION", "ACCEPTED", "EXPIRED", "CANCELED"]} count={`${rows.length} of ${snapshot.quotes.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={FileCheck2} emptyTitle="No quotations found" actionLabel="New quotation" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "invoices") {
@@ -147,7 +160,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "due", header: "Due", cell: (invoice) => <span className="text-muted-foreground">{formatDate(invoice.dueDate)}</span>, className: "hidden md:table-cell", headerClassName: "hidden md:table-cell" },
       { id: "total", header: "Balance", cell: (invoice) => <div><p className="font-medium tabular-nums">{formatCurrency(invoice.total - invoice.paidAmount, "USD")}</p><p className="text-xs text-muted-foreground">of {formatCurrency(invoice.total, "USD")}</p></div> },
     ];
-    return <OperationsTable heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "CONFIRMED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELED"]} count={`${rows.length} of ${snapshot.invoices.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={ReceiptText} emptyTitle="No invoices found" actionLabel="Create invoice" admin={isAdmin} />;
+    return <OperationsTable mode="invoices" heading={heading} search={search} setSearch={setSearch} status={status} setStatus={setStatus} statusOptions={["DRAFT", "CONFIRMED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELED"]} count={`${rows.length} of ${snapshot.invoices.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={ReceiptText} emptyTitle="No invoices found" actionLabel="Create invoice" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "payments") {
@@ -159,7 +172,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "date", header: "Date", cell: (payment) => <span className="text-muted-foreground">{formatDate(payment.paymentDate)}</span> },
       { id: "amount", header: "Amount", cell: (payment) => <span className="font-medium tabular-nums">{formatCurrency(payment.amount, "USD")}</span> },
     ];
-    return <OperationsTable heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.payments.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={WalletCards} emptyTitle="No payments recorded" actionLabel="Record payment" admin={isAdmin} />;
+    return <OperationsTable mode="payments" heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.payments.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={WalletCards} emptyTitle="No payments recorded" actionLabel="Record payment" admin={isAdmin || isStaff} />;
   }
 
   if (mode === "discounts") {
@@ -171,7 +184,7 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
       { id: "usage", header: "Usage", cell: (discount) => <span className="tabular-nums">{discount.usedRedemptions}{discount.maxRedemptions ? ` / ${discount.maxRedemptions}` : ""}</span> },
       { id: "status", header: "Status", cell: (discount) => <StatusBadge status={discount.status} /> },
     ];
-    return <OperationsTable heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.discounts.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Sparkles} emptyTitle="No discount rules" actionLabel="Create discount" admin={isAdmin} />;
+    return <OperationsTable mode="discounts" heading={heading} search={search} setSearch={setSearch} status="ALL" setStatus={setStatus} statusOptions={[]} count={`${rows.length} of ${snapshot.discounts.length}`} data={rows} columns={columns} keyOf={(row) => row.id} icon={Sparkles} emptyTitle="No discount rules" actionLabel="Create discount" admin={isAdmin} />;
   }
 
   const rows = snapshot.billingRuns.filter((run) => !query || `${run.number} ${run.status}`.toLowerCase().includes(query));
@@ -182,13 +195,23 @@ export function OperationsView({ mode }: { mode: OperationsMode }) {
     { id: "invoices", header: "Invoices", cell: (run) => <span className="tabular-nums">{run.invoicesCreated}</span> },
     { id: "revenue", header: "Revenue", cell: (run) => <span className="font-medium tabular-nums">{formatCurrency(run.revenue, "USD")}</span> },
   ];
-  return <BillingView heading={heading} search={search} setSearch={setSearch} rows={rows} columns={columns} isAdmin={isAdmin} />;
+  return <BillingView heading={heading} search={search} setSearch={setSearch} rows={rows} columns={columns} isAdmin={isAdmin || isStaff} />;
 }
 
-function OperationsTable<T>({ heading, search, setSearch, status, setStatus, statusOptions, count, data, columns, keyOf, icon, emptyTitle, actionLabel, admin }: { heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; status: string; setStatus: (value: string) => void; statusOptions: string[]; count: string; data: T[]; columns: DataColumn<T>[]; keyOf: (row: T) => string; icon: typeof Users; emptyTitle: string; actionLabel: string; admin: boolean }) {
+function OperationsTable<T>({ mode, heading, search, setSearch, status, setStatus, statusOptions, count, data, columns, keyOf, icon, emptyTitle, actionLabel, admin }: { mode: Exclude<OperationsMode, "billing" | "reports" | "portal">; heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; status: string; setStatus: (value: string) => void; statusOptions: string[]; count: string; data: T[]; columns: DataColumn<T>[]; keyOf: (row: T) => string; icon: typeof Users; emptyTitle: string; actionLabel: string; admin: boolean }) {
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const createRecord = () => {
+    if (!USE_MOCKS) {
+      toast.info("This action requires the connected operations API.");
+      return;
+    }
+    setOpen(true);
+  };
+
   return (
     <div className="space-y-6">
-      <PageHeader title={heading.title} description={heading.description} actions={admin ? <Button size="sm" onClick={() => toast.info(`${actionLabel} flow is ready for backend integration.`)}><Plus />{actionLabel}</Button> : null} />
+      <PageHeader title={heading.title} description={heading.description} actions={admin ? <Button size="sm" onClick={createRecord}><Plus />{actionLabel}</Button> : null} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SearchInput value={search} onChange={setSearch} placeholder={`Search ${heading.title.toLowerCase()}…`} />
         <div className="flex items-center gap-2">
@@ -196,13 +219,81 @@ function OperationsTable<T>({ heading, search, setSearch, status, setStatus, sta
           <span className="text-xs text-muted-foreground">{count}</span>
         </div>
       </div>
-      <DataTable data={data} columns={columns} getRowKey={keyOf} emptyState={<EmptyState icon={icon} title={emptyTitle} description="Records will appear here as your team works through the billing cycle." action={admin ? <Button size="sm" onClick={() => toast.info(`${heading.title} creation is ready for backend integration.`)}><Plus />{actionLabel}</Button> : undefined} />} />
+      <DataTable data={data} columns={columns} getRowKey={keyOf} emptyState={<EmptyState icon={icon} title={emptyTitle} description="Records will appear here as your team works through the billing cycle." action={admin ? <Button size="sm" onClick={createRecord}><Plus />{actionLabel}</Button> : undefined} />} />
+      <OperationCreateDialog mode={mode} open={open} onOpenChange={setOpen} onCreated={() => void queryClient.invalidateQueries({ queryKey: queryKeys.operations })} />
     </div>
   );
 }
 
+function OperationCreateDialog({ mode, open, onOpenChange, onCreated }: { mode: Exclude<OperationsMode, "billing" | "reports" | "portal">; open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [amount, setAmount] = useState("10000");
+  const [code, setCode] = useState("");
+  const [saving, setSaving] = useState(false);
+  const titles: Record<typeof mode, string> = { customers: "Add customer", quotes: "New quotation", invoices: "Create invoice", payments: "Record payment", discounts: "Create discount" };
+  const descriptions: Record<typeof mode, string> = { customers: "Create a customer account for subscription operations.", quotes: "Create a starter quotation from the seeded catalogue.", invoices: "Create a draft invoice for a customer.", payments: "Record a payment against the latest invoice.", discounts: "Create a percentage discount rule.", };
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const data = loadMockData();
+      const now = new Date();
+      const future = new Date(now.getTime() + 30 * 86400000).toISOString();
+      const customer = data.customers[0];
+      const product = data.products[0];
+      if (mode === "customers") {
+        const customerName = name.trim() || "New customer";
+        data.customers.unshift({ id: createId("cus"), name: customerName, legalName: customerName, email: email.trim() || `${createId("contact")}@example.com`, status: "ACTIVE", createdAt: now.toISOString(), activeSubscriptions: 0, outstandingAmount: 0 });
+      } else if (!customer || !product) {
+        throw new Error("Create a customer and product first.");
+      } else if (mode === "quotes") {
+        const total = Math.max(0, Number(amount) || product.salesPrice || 0);
+        data.quotes.unshift({ id: createId("quo"), number: `QUO/${now.getFullYear()}/NEW`, customerId: customer.id, customerName: customer.name, templateName: "Quick quote", status: "DRAFT", validUntil: future, total, createdAt: now.toISOString(), lines: [{ id: createId("ql"), description: product.name, quantity: 1, unitPrice: total, taxRate: product.taxRate ?? 0, amount: total }] });
+      } else if (mode === "invoices") {
+        const total = Math.max(0, Number(amount) || product.salesPrice || 0);
+        data.invoices.unshift({ id: createId("inv"), number: `INV/${now.getFullYear()}/NEW`, customerId: customer.id, customerName: customer.name, status: "DRAFT", issueDate: now.toISOString(), dueDate: future, subtotal: total, taxAmount: 0, discountAmount: 0, total, paidAmount: 0, lines: [{ id: createId("line"), description: product.name, quantity: 1, unitPrice: total, taxRate: 0, taxAmount: 0, amount: total }] });
+      } else if (mode === "payments") {
+        const invoice = data.invoices.find((item) => item.status !== "PAID" && item.status !== "CANCELED");
+        if (!invoice) throw new Error("Create an invoice first.");
+        const paymentAmount = Math.min(Math.max(1, Number(amount) || 1), invoice.total - invoice.paidAmount);
+        invoice.paidAmount += paymentAmount;
+        invoice.status = invoice.paidAmount >= invoice.total ? "PAID" : "PARTIALLY_PAID";
+        data.payments.unshift({ id: createId("pay"), number: `PAY/${now.getFullYear()}/NEW`, invoiceId: invoice.id, invoiceNumber: invoice.number, customerName: invoice.customerName, method: "ONLINE", amount: paymentAmount, paymentDate: now.toISOString(), status: "CONFIRMED" });
+      } else {
+        data.discounts.unshift({ id: createId("dsc"), name: name.trim() || "New discount", code: code.trim().toUpperCase() || `SAVE${Math.floor(Math.random() * 90 + 10)}`, type: "PERCENTAGE", value: Math.min(100, Math.max(1, Number(amount) || 10)), minimumPurchase: 0, minimumQuantity: 1, startsAt: now.toISOString(), usedRedemptions: 0, status: "ACTIVE" });
+      }
+      saveMockData(data);
+      onCreated();
+      toast.success(`${titles[mode]} created.`);
+      onOpenChange(false);
+      setName(""); setEmail(""); setCode("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The record could not be created.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>{titles[mode]}</DialogTitle><DialogDescription>{descriptions[mode]}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{mode === "customers" ? <><div className="space-y-2"><Label htmlFor="customer-name">Name</Label><Input id="customer-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Acme Labs" required /></div><div className="space-y-2"><Label htmlFor="customer-email">Email</Label><Input id="customer-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="billing@acme.test" required /></div></> : null}{mode === "discounts" ? <><div className="space-y-2"><Label htmlFor="discount-name">Name</Label><Input id="discount-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Launch discount" required /></div><div className="space-y-2"><Label htmlFor="discount-code">Code</Label><Input id="discount-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="LAUNCH20" required /></div><div className="space-y-2"><Label htmlFor="discount-value">Percentage</Label><Input id="discount-value" type="number" min="1" max="100" value={amount} onChange={(event) => setAmount(event.target.value)} /></div></> : null}{["quotes", "invoices", "payments"].includes(mode) ? <div className="space-y-2"><Label htmlFor="record-amount">Amount</Label><Input id="record-amount" type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} /></div> : null}<DialogFooter><Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button><Button type="submit" disabled={saving}>{saving ? "Saving…" : "Create"}</Button></DialogFooter></form></DialogContent></Dialog>;
+}
+
 function BillingView({ heading, search, setSearch, rows, columns, isAdmin }: { heading: { title: string; description: string }; search: string; setSearch: (value: string) => void; rows: BillingRun[]; columns: DataColumn<BillingRun>[]; isAdmin: boolean }) {
-  return <div className="space-y-6"><PageHeader title={heading.title} description={heading.description} actions={isAdmin ? <Button size="sm" onClick={() => toast.success("Billing preview queued. No duplicate periods will be billed.")}><Play />Run billing</Button> : null} /><div className="grid gap-4 sm:grid-cols-3"><StatCard label="Due today" value="128" hint="Subscriptions ready to bill" icon={ReceiptText} tone="indigo" /><StatCard label="Expected revenue" value={formatCurrency(1849200, "USD")} hint="Before taxes and discounts" icon={CircleDollarSign} tone="emerald" /><StatCard label="Last run" value="1m 42s" hint="Completed without retries" icon={RefreshCw} tone="sky" /></div><div className="flex items-center justify-between"><SearchInput value={search} onChange={setSearch} placeholder="Search billing runs…" /><span className="text-xs text-muted-foreground">{rows.length} runs</span></div><DataTable data={rows} columns={columns} getRowKey={(row) => row.id} emptyState={<EmptyState icon={RefreshCw} title="No billing runs yet" description="Run billing once subscriptions are due." action={isAdmin ? <Button size="sm" onClick={() => toast.info("Billing preview queued.")}><Play />Run billing</Button> : undefined} />} /></div>;
+  const queryClient = useQueryClient();
+  const runBilling = () => {
+    if (!USE_MOCKS) {
+      toast.info("Billing runs require the connected billing API.");
+      return;
+    }
+    const data = loadMockData();
+    const now = new Date().toISOString();
+    data.billingRuns.unshift({ id: createId("run"), number: `RUN/${new Date().getFullYear()}/NEW`, billingDate: now, status: "COMPLETED", subscriptions: data.subscriptions.filter((item) => item.status === "ACTIVE").length, invoicesCreated: 0, revenue: 0, startedAt: now, completedAt: now });
+    saveMockData(data);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.operations });
+    toast.success("Billing run completed. No duplicate periods were created.");
+  };
+  return <div className="space-y-6"><PageHeader title={heading.title} description={heading.description} actions={isAdmin ? <Button size="sm" onClick={runBilling}><Play />Run billing</Button> : null} /><div className="grid gap-4 sm:grid-cols-3"><StatCard label="Due today" value="128" hint="Subscriptions ready to bill" icon={ReceiptText} tone="indigo" /><StatCard label="Expected revenue" value={formatCurrency(1849200, "USD")} hint="Before taxes and discounts" icon={CircleDollarSign} tone="emerald" /><StatCard label="Last run" value="1m 42s" hint="Completed without retries" icon={RefreshCw} tone="sky" /></div><div className="flex items-center justify-between"><SearchInput value={search} onChange={setSearch} placeholder="Search billing runs…" /><span className="text-xs text-muted-foreground">{rows.length} runs</span></div><DataTable data={rows} columns={columns} getRowKey={(row) => row.id} emptyState={<EmptyState icon={RefreshCw} title="No billing runs yet" description="Run billing once subscriptions are due." action={isAdmin ? <Button size="sm" onClick={runBilling}><Play />Run billing</Button> : undefined} />} /></div>;
 }
 
 function ReportsView({ snapshot }: { snapshot: OperationsSnapshot }) {
