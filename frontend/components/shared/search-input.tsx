@@ -28,7 +28,7 @@ export function SearchInput({
         <button
           type="button"
           onClick={() => onChange("")}
-          className="absolute top-1/2 right-2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:text-foreground"
+          className="absolute top-1/2 right-1 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           aria-label="Clear search"
         >
           <X className="size-3.5" />

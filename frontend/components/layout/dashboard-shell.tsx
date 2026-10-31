@@ -106,7 +106,10 @@ function NavigationLinks({
   onNavigate?: () => void;
 }) {
   return (
-    <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+    <nav
+      aria-label="Workspace navigation"
+      className="flex-1 space-y-6 overflow-y-auto px-3 py-4"
+    >
       {navigation.map((group) => {
         const items = group.items.filter((item) => !item.adminOnly || isAdmin);
 
@@ -130,11 +133,12 @@ function NavigationLinks({
                     href={item.href}
                     onClick={onNavigate}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
+                      "flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors",
                       active
                         ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-xs"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
                     )}
+                    aria-current={active ? "page" : undefined}
                   >
                     <Icon
                       className={cn(
@@ -186,6 +190,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-svh bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[60] focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-md"
+      >
+        Skip to main content
+      </a>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r bg-sidebar lg:flex">
         <div className="flex h-16 items-center border-b px-5">
           <Logo />
@@ -248,7 +258,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="flex items-center gap-2 rounded-lg p-1 pr-2 text-left transition-colors hover:bg-muted"
+                  aria-label={`Open account menu for ${user.name}`}
+                  className="flex min-h-11 items-center gap-2 rounded-lg p-1 pr-2 text-left transition-colors hover:bg-muted"
                 >
                   <Avatar className="size-8">
                     <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
@@ -290,7 +301,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main id="main-content" tabIndex={-1} className="px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8">
           <div className="mx-auto max-w-7xl">{children}</div>
         </main>
       </div>
