@@ -14,6 +14,7 @@ import type {
   UpdateSubscriptionInput,
   UpdateUserInput,
   User,
+  OperationsSnapshot,
 } from "@/types/api";
 
 export interface ApiClient {
@@ -49,5 +50,8 @@ export interface ApiClient {
       id: string,
       input: UpdateSubscriptionInput,
     ): Promise<SubscriptionWithRelations>;
+  };
+  operations: {
+    snapshot(): Promise<OperationsSnapshot>;
   };
 }

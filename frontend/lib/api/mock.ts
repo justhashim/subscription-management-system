@@ -27,6 +27,7 @@ import type {
   UpdateSubscriptionInput,
   UpdateUserInput,
   User,
+  OperationsSnapshot,
 } from "@/types/api";
 
 function getRelations(data = loadMockData()) {
@@ -418,6 +419,57 @@ export const mockApi: ApiClient = {
       data.subscriptions[index] = { ...data.subscriptions[index], ...input };
       saveMockData(data);
       return toSubscriptionWithRelations(id, data);
+    },
+  },
+
+  operations: {
+    async snapshot(): Promise<OperationsSnapshot> {
+      await wait();
+      const data = loadMockData();
+      const revenueCollected = data.invoices.reduce(
+        (total, invoice) => total + invoice.paidAmount,
+        0,
+      );
+      const outstanding = data.invoices.reduce(
+        (total, invoice) => total + Math.max(invoice.total - invoice.paidAmount, 0),
+        0,
+      );
+      const monthly = data.subscriptions
+        .filter((subscription) =>
+          ["ACTIVE", "TRIALING"].includes(subscription.status),
+        )
+        .reduce((total, subscription) => {
+          const plan = data.plans.find((item) => item.id === subscription.planId);
+          if (!plan) return total;
+          if (plan.interval === "YEARLY") return total + plan.price / 12;
+          if (plan.interval === "WEEKLY") return total + plan.price * 52 / 12;
+          if (plan.interval === "DAILY") return total + plan.price * 365 / 12;
+          return total + plan.price;
+        }, 0);
+
+      return {
+        customers: data.customers,
+        quotes: data.quotes,
+        invoices: data.invoices,
+        payments: data.payments,
+        discounts: data.discounts,
+        billingRuns: data.billingRuns,
+        summary: {
+          activeSubscriptions: data.subscriptions.filter(
+            (subscription) => subscription.status === "ACTIVE",
+          ).length,
+          mrr: Math.round(monthly),
+          arr: Math.round(monthly * 12),
+          revenueCollected,
+          outstanding,
+          overdue: data.invoices
+            .filter((invoice) => invoice.status === "OVERDUE")
+            .reduce((total, invoice) => total + invoice.total - invoice.paidAmount, 0),
+          overdueCount: data.invoices.filter(
+            (invoice) => invoice.status === "OVERDUE",
+          ).length,
+        },
+      };
     },
   },
 };

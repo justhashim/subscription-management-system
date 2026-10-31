@@ -19,6 +19,20 @@ const statusStyles: Record<string, string> = {
     "bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300",
   EXPIRED:
     "bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-300",
+  DRAFT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-300",
+  QUOTATION: "bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300",
+  ACCEPTED: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+  CONFIRMED: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300",
+  ISSUED: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300",
+  PARTIALLY_PAID: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+  PAID: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+  OVERDUE: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
+  COMPLETED: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+  PROCESSING: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+  PARTIALLY_FAILED: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+  FAILED: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
+  PROSPECT: "bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-300",
+  INACTIVE: "bg-zinc-100 text-zinc-600 dark:bg-zinc-500/10 dark:text-zinc-300",
 };
 
 export function StatusBadge({

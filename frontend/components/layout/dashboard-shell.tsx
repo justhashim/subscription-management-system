@@ -4,15 +4,21 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   Boxes,
   ChevronDown,
   CreditCard,
+  FileCheck2,
   LayoutDashboard,
   Layers,
   LogOut,
   Menu,
+  ReceiptText,
+  RefreshCw,
   ShieldCheck,
+  Sparkles,
   Users,
+  WalletCards,
   type LucideIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-provider";
@@ -45,6 +51,7 @@ interface NavItem {
   label: string;
   icon: LucideIcon;
   adminOnly?: boolean;
+  customerOnly?: boolean;
 }
 
 interface NavGroup {
@@ -82,6 +89,29 @@ const navigation: NavGroup[] = [
       },
     ],
   },
+  {
+    label: "Operations",
+    items: [
+      { href: "/customers", label: "Customers", icon: Users },
+      { href: "/quotations", label: "Quotations", icon: FileCheck2 },
+      { href: "/invoices", label: "Invoices", icon: ReceiptText },
+      { href: "/payments", label: "Payments", icon: WalletCards },
+    ],
+  },
+  {
+    label: "Finance",
+    items: [
+      { href: "/billing", label: "Billing runs", icon: RefreshCw },
+      { href: "/reports", label: "Reports", icon: BarChart3 },
+      { href: "/discounts", label: "Discounts", icon: Sparkles, adminOnly: true },
+    ],
+  },
+  {
+    label: "Self-service",
+    items: [
+      { href: "/portal", label: "Customer portal", icon: ShieldCheck, customerOnly: true },
+    ],
+  },
 ];
 
 const sectionTitles: Record<string, string> = {
@@ -90,6 +120,14 @@ const sectionTitles: Record<string, string> = {
   "/products": "Products",
   "/plans": "Plans",
   "/users": "Users",
+  "/customers": "Customers",
+  "/quotations": "Quotations",
+  "/invoices": "Invoices",
+  "/payments": "Payments",
+  "/billing": "Billing runs",
+  "/discounts": "Discounts",
+  "/reports": "Reports",
+  "/portal": "Customer portal",
 };
 
 function isActive(pathname: string, href: string) {
@@ -99,10 +137,12 @@ function isActive(pathname: string, href: string) {
 function NavigationLinks({
   pathname,
   isAdmin,
+  isCustomer,
   onNavigate,
 }: {
   pathname: string;
   isAdmin: boolean;
+  isCustomer: boolean;
   onNavigate?: () => void;
 }) {
   return (
@@ -111,7 +151,11 @@ function NavigationLinks({
       className="flex-1 space-y-6 overflow-y-auto px-3 py-4"
     >
       {navigation.map((group) => {
-        const items = group.items.filter((item) => !item.adminOnly || isAdmin);
+        const items = group.items.filter(
+          (item) =>
+            (!item.adminOnly || isAdmin) &&
+            (!item.customerOnly || isCustomer),
+        );
 
         if (items.length === 0) {
           return null;
@@ -159,7 +203,7 @@ function NavigationLinks({
 }
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { user, loading, isAdmin, logout } = useAuth();
+  const { user, loading, isAdmin, isCustomer, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -200,7 +244,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <div className="flex h-16 items-center border-b px-5">
           <Logo />
         </div>
-        <NavigationLinks pathname={pathname} isAdmin={isAdmin} />
+        <NavigationLinks pathname={pathname} isAdmin={isAdmin} isCustomer={isCustomer} />
         <div className="border-t p-3">
           <div className="rounded-xl bg-sidebar-accent/60 p-3">
             <div className="flex items-center gap-2 text-xs font-medium text-sidebar-accent-foreground">
@@ -236,6 +280,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <NavigationLinks
                 pathname={pathname}
                 isAdmin={isAdmin}
+                isCustomer={isCustomer}
                 onNavigate={() => setMobileOpen(false)}
               />
             </SheetContent>

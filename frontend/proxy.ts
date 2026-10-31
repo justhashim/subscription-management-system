@@ -2,7 +2,21 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, decodeSession } from "./lib/auth/cookie";
 
-const protectedRoutes = ["/dashboard", "/users", "/products", "/plans", "/subscriptions"];
+const protectedRoutes = [
+  "/dashboard",
+  "/users",
+  "/products",
+  "/plans",
+  "/subscriptions",
+  "/customers",
+  "/quotations",
+  "/invoices",
+  "/payments",
+  "/billing",
+  "/discounts",
+  "/reports",
+  "/portal",
+];
 const authRoutes = ["/login", "/register"];
 
 export function proxy(request: NextRequest) {
@@ -40,6 +54,14 @@ export const config = {
     "/products/:path*",
     "/plans/:path*",
     "/subscriptions/:path*",
+    "/customers/:path*",
+    "/quotations/:path*",
+    "/invoices/:path*",
+    "/payments/:path*",
+    "/billing/:path*",
+    "/discounts/:path*",
+    "/reports/:path*",
+    "/portal/:path*",
     "/login",
     "/register",
   ],

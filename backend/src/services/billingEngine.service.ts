@@ -1,96 +1,158 @@
-
+// src/services/billingEngine.service.ts
 import type { FastifyInstance } from 'fastify';
 import { billingRepo } from '../repositories/billingRepo.js';
 import { invoiceRepo } from '../repositories/invoiceRepo.js';
-import {
-  calculateLineItem,
-  calculateInvoiceTotals
-} from '../utils/financialMath.js';
+import { InvoiceBuilder, type BillingItem } from './invoiceBuilder.service.js';
+import { DiscountManager } from './discountManager.serivce.js';
+import { addDays, assertDateString, getPeriodForDate } from '../utils/billingPeriod.js';
 
-type BillingSubscription = {
-  id: string;
-  customer_id: string;
-  plan_id: string;
-  plan_price: string | number;
-  start_date: string | Date;
-  end_date: string | Date | null;
-  next_billing_date: string | Date;
-  billing_interval: 'daily' | 'monthly' | 'yearly';
+type BillingConfig = {
+  taxRateBasisPoints: number;
+  paymentTermsDays: number;
 };
 
 export class BillingEngine {
+  private readonly builder = new InvoiceBuilder();
+  private readonly discounts = new DiscountManager();
+
   constructor(private readonly app: FastifyInstance) {}
 
-  async runBillingBatch(targetDate: string, runNumber: string) {
+  // Tax rate and payment terms are not stored in the schema, so they come from configuration.
+  private readConfig(): BillingConfig {
+    const taxRateBasisPoints = Number(process.env.DEFAULT_TAX_RATE_BPS ?? 0);
+    const paymentTermsDays = Number(process.env.DEFAULT_PAYMENT_TERMS_DAYS ?? 0);
+
+    if (!Number.isSafeInteger(taxRateBasisPoints) || taxRateBasisPoints < 0 || taxRateBasisPoints > 10000) {
+      throw new Error('DEFAULT_TAX_RATE_BPS must be between 0 and 10000');
+    }
+    if (!Number.isSafeInteger(paymentTermsDays) || paymentTermsDays < 0) {
+      throw new Error('DEFAULT_PAYMENT_TERMS_DAYS must be a non-negative integer');
+    }
+    return { taxRateBasisPoints, paymentTermsDays };
+  }
+
+  // Single pricing path shared by preview and the real run.
+  private async priceInvoice(
+    db: any,
+    items: BillingItem[],
+    taxRateBasisPoints: number,
+    discountCode: string | null,
+    pendingRedemptions = 0
+  ) {
+    let discountId: string | null = null;
+    let discountAmount = 0;
+
+    if (discountCode) {
+      const summary = this.builder.summarize(items);
+      const evaluation = await this.discounts.evaluate(
+        db,
+        discountCode,
+        summary.subtotal,
+        summary.quantity,
+        pendingRedemptions
+      );
+      if (evaluation.discountId) {
+        discountId = evaluation.discountId;
+        discountAmount = evaluation.appliedAmount;
+      }
+    }
+
+    const { lines, totals } = this.builder.build(items, taxRateBasisPoints, discountAmount);
+    return { lines, totals, discountId, discountAmount };
+  }
+
+  /** Dry run: what a billing run on `targetDate` would create. Writes nothing. */
+  async preview(targetDate: string, discountCode?: string | null) {
+    assertDateString(targetDate);
+    const config = this.readConfig();
+    const code = discountCode?.trim() || null;
+
+    const client = await this.app.db.getClient();
+    try {
+      const due = await billingRepo.getDueSubscriptions(client, targetDate);
+      const ids = due.map((s) => s.id);
+      const itemsBySubscription = await billingRepo.getItemsForSubscriptions(client, ids);
+      const existing = await invoiceRepo.getExistingPeriods(client, ids);
+
+      let expectedRevenue = 0;
+      let willSkip = 0;
+      let discountsGranted = 0;
+      const candidates: Record<string, unknown>[] = [];
+
+      for (const sub of due) {
+        const base = {
+          subscriptionId: sub.id,
+          subscriptionNumber: sub.subscription_number,
+          customerId: sub.customer_id
+        };
+
+        try {
+          const period = getPeriodForDate(sub.start_date, sub.billing_interval, sub.next_billing_date);
+          const alreadyInvoiced = existing.has(`${sub.id}:${period.periodIndex}`);
+          const items = itemsBySubscription.get(sub.id) ?? [];
+
+          if (items.length === 0) throw new Error('Subscription has no billing items');
+
+          const priced = await this.priceInvoice(
+            client,
+            items,
+            config.taxRateBasisPoints,
+            alreadyInvoiced ? null : code,
+            discountsGranted
+          );
+
+          if (alreadyInvoiced) {
+            willSkip++;
+          } else {
+            expectedRevenue += priced.totals.totalAmount;
+            if (priced.discountId) discountsGranted++;
+          }
+
+          candidates.push({
+            ...base,
+            periodIndex: period.periodIndex,
+            periodStart: period.periodStart,
+            periodEnd: period.periodEnd,
+            ...priced.totals,
+            discountApplied: priced.discountId !== null,
+            alreadyInvoiced
+          });
+        } catch (error) {
+          candidates.push({
+            ...base,
+            error: error instanceof Error ? error.message : 'Unknown billing error'
+          });
+        }
+      }
+
+      return {
+        subscriptionsDue: due.length,
+        willSkip,
+        expectedRevenue,
+        candidates
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async runBillingBatch(targetDate: string, runNumber: string, discountCode?: string | null) {
+    assertDateString(targetDate);
+    const config = this.readConfig();
+    const code = discountCode?.trim() || null;
     const db = this.app.db;
 
-    // Validate the configured tax rate (basis points).
-    const configuredTaxRate = Number(
-      process.env.DEFAULT_TAX_RATE_BPS ?? 0
-    );
-
-    if (
-      !Number.isSafeInteger(configuredTaxRate) ||
-      configuredTaxRate < 0 ||
-      configuredTaxRate > 10000
-    ) {
-      throw new Error(
-        'DEFAULT_TAX_RATE_BPS must be between 0 and 10000'
-      );
-    }
-
-    // Load subscriptions due for billing.
-    const candidateClient = await db.getClient();
-    let candidates: BillingSubscription[];
-
-    try {
-      const result = await candidateClient.query(
-        `SELECT
-           id,
-           customer_id,
-           plan_id,
-           plan_price,
-           start_date,
-           end_date,
-           next_billing_date,
-           billing_interval
-         FROM subscriptions
-         WHERE status = 'active'
-           AND next_billing_date IS NOT NULL
-           AND next_billing_date <= $1
-           AND (end_date IS NULL OR next_billing_date <= end_date)
-         ORDER BY next_billing_date ASC`,
-        [targetDate]
-      );
-
-      candidates = result.rows;
-    } finally {
-      candidateClient.release();
-    }
-
-    if (candidates.length === 0) {
-      return {
-        status: 'completed',
-        total: 0,
-        invoicesCreated: 0,
-        skipped: 0,
-        failed: 0
-      };
-    }
-
-    // Create the billing run record for this batch.
-    const initClient = await db.getClient();
+    const setupClient = await db.getClient();
+    let candidates;
     let run: { id: string };
-
     try {
-      run = await billingRepo.createBillingRun(
-        initClient,
-        runNumber,
-        targetDate,
-        candidates.length
-      );
+      candidates = await billingRepo.getDueSubscriptions(setupClient, targetDate);
+      if (candidates.length === 0) {
+        return { status: 'completed', total: 0, invoicesCreated: 0, skipped: 0, failed: 0 };
+      }
+      run = await billingRepo.createBillingRun(setupClient, runNumber, targetDate, candidates.length);
     } finally {
-      initClient.release();
+      setupClient.release();
     }
 
     let invoicesCreated = 0;
@@ -99,219 +161,124 @@ export class BillingEngine {
 
     for (const sub of candidates) {
       const tx = await db.getClient();
-
       let runItemId: string | null = null;
-      let transactionStarted = false;
+      let inTransaction = false;
 
       try {
-        const periodStart = this.toDateOnly(
-          sub.next_billing_date
-        );
+        const period = getPeriodForDate(sub.start_date, sub.billing_interval, sub.next_billing_date);
 
-        const periodIndex = this.calculatePeriodIndex(
-          this.toDateOnly(sub.start_date),
-          periodStart,
-          sub.billing_interval
-        );
-
-        const periodEnd = this.calculatePeriodEnd(
-          periodStart,
-          sub.billing_interval
-        );
-
-        const nextBillingDate = this.addDays(periodEnd, 1);
-
-        // Create run item before invoice transaction.
+        // The run item is written first (its own commit) so a failure can still be recorded.
         const runItem = await billingRepo.createBillingRunItem(
-          tx,
-          run.id,
-          sub.id,
-          periodIndex,
-          periodStart,
-          periodEnd
+          tx, run.id, sub.id, period.periodIndex, period.periodStart, period.periodEnd
         );
-
         runItemId = runItem.id;
 
         await tx.query('BEGIN');
-        transactionStarted = true;
+        inTransaction = true;
 
-        // Load subscription item snapshots.
-        const itemResult = await tx.query(
-          `SELECT
-             product_id,
-             product_name,
-             variant_name,
-             quantity,
-             unit_price
-           FROM subscription_items
-           WHERE subscription_id = $1
-           ORDER BY created_at ASC`,
-          [sub.id]
-        );
-
-        if (itemResult.rows.length === 0) {
-          throw new Error(
-            'Subscription has no billing items'
-          );
-        }
-
-        // Calculate each invoice line only once.
-        const calculatedResults = itemResult.rows.map(
-          (item: any) => {
-            return calculateLineItem({
-              planPrice: Number(item.unit_price),
-              variantAdjustment: 0,
-              quantity: Number(item.quantity),
-              lineDiscountAmount: 0,
-              proratedSubDiscount: 0,
-              taxRateBasisPoints: configuredTaxRate
-            });
-          }
-        );
-
-        const lineItems = itemResult.rows.map(
-          (item: any, index: number) => {
-            const line = calculatedResults[index];
-
-            return {
-              productId: item.product_id,
-              description: item.product_name,
-              quantity: Number(item.quantity),
-              unitPrice: Number(item.unit_price),
-              discountAmount: line.discountAmount ?? 0,
-              taxRateBasisPoints: configuredTaxRate,
-              taxAmount: line.taxAmount ?? 0,
-              lineTotal: line.lineTotal
-            };
-          }
-        );
-
-        // Calculate invoice totals from the same line calculations.
-        const totals = calculateInvoiceTotals(
-          calculatedResults
-        );
-
-        // Create invoice.
-        const invoice = await invoiceRepo.createInvoice(
-          tx,
-          {
-            invoiceNumber:
-              `INV-${runNumber}-${sub.id.substring(0, 6)}`,
-            customerId: sub.customer_id,
-            subscriptionId: sub.id,
-            billingRunId: run.id,
-            periodIndex,
-            dueDate: periodEnd,
-            totals
-          }
-        );
-
-        // Duplicate invoice protection.
-        if (!invoice) {
-          await tx.query('ROLLBACK');
-          transactionStarted = false;
-
+        // Lock the subscription and make sure nobody else billed it in the meantime.
+        const locked = await billingRepo.lockSubscription(tx, sub.id);
+        if (!locked || locked.status !== 'active' || locked.next_billing_date !== sub.next_billing_date) {
           await billingRepo.updateBillingRunItem(
-            tx,
-            runItemId,
-            'skipped',
-            null,
-            'Invoice already exists for this billing period'
+            tx, runItemId, 'skipped', null, 'Subscription already billed or no longer active'
           );
-
+          await tx.query('COMMIT');
+          inTransaction = false;
           skipped++;
           continue;
         }
 
-        // Insert invoice items.
-        await invoiceRepo.createInvoiceItems(
-          tx,
-          invoice.id,
-          lineItems
-        );
-
-        // Advance subscription only after invoice creation succeeds.
-        await tx.query(
-          `UPDATE subscriptions
-           SET next_billing_date = $1,
-               updated_at = now()
-           WHERE id = $2
-             AND next_billing_date = $3`,
-          [nextBillingDate, sub.id, periodStart]
-        );
-
-        // Mark billing run item successful.
-        await billingRepo.updateBillingRunItem(
-          tx,
-          runItemId,
-          'success',
-          invoice.id
-        );
-
-        await tx.query('COMMIT');
-        transactionStarted = false;
-
-        invoicesCreated++;
-      } catch (error: unknown) {
-        if (transactionStarted) {
-          await tx.query('ROLLBACK').catch(() => undefined);
-          transactionStarted = false;
+        const items = await billingRepo.getSubscriptionItems(tx, sub.id);
+        if (items.length === 0) {
+          throw new Error('Subscription has no billing items');
         }
 
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Unknown billing error';
+        const priced = await this.priceInvoice(tx, items, config.taxRateBasisPoints, code);
+
+        // A duplicate period violates the unique recurring-invoice index. The savepoint
+        // lets us treat that as "already billed" without aborting the whole transaction.
+        let invoice: { id: string } | null = null;
+        await tx.query('SAVEPOINT create_invoice');
+        try {
+          invoice = await invoiceRepo.createInvoice(tx, {
+            invoiceNumber: `INV-${sub.subscription_number}-${period.periodIndex}`,
+            customerId: sub.customer_id,
+            subscriptionId: sub.id,
+            billingRunId: run.id,
+            periodIndex: period.periodIndex,
+            periodStart: period.periodStart,
+            periodEnd: period.periodEnd,
+            issueDate: targetDate,
+            dueDate: addDays(targetDate, config.paymentTermsDays),
+            totals: priced.totals
+          });
+        } catch (error: any) {
+          if (error?.code !== '23505') throw error;
+
+          await tx.query('ROLLBACK TO SAVEPOINT create_invoice');
+          const existing = await invoiceRepo.findActiveRecurringInvoice(tx, sub.id, period.periodIndex);
+          if (!existing) throw error; // a different unique violation (e.g. invoice number)
+        }
+
+        if (!invoice) {
+          // Period already invoiced: move the subscription on so it is not retried forever.
+          await billingRepo.advanceSubscription(tx, sub.id, sub.next_billing_date, period.nextBillingDate);
+          await billingRepo.updateBillingRunItem(
+            tx, runItemId, 'skipped', null, 'Invoice already exists for this billing period'
+          );
+          await tx.query('COMMIT');
+          inTransaction = false;
+          skipped++;
+          continue;
+        }
+
+        await invoiceRepo.createInvoiceItems(tx, invoice.id, priced.lines);
+
+        if (priced.discountId) {
+          await this.discounts.redeem(tx, priced.discountId, invoice.id, sub.customer_id, priced.discountAmount);
+        }
+
+        const advanced = await billingRepo.advanceSubscription(
+          tx, sub.id, sub.next_billing_date, period.nextBillingDate
+        );
+        if (!advanced) {
+          throw new Error('Subscription billing date changed during billing');
+        }
+
+        await billingRepo.updateBillingRunItem(tx, runItemId, 'success', invoice.id);
+        await tx.query('COMMIT');
+        inTransaction = false;
+        invoicesCreated++;
+      } catch (error: unknown) {
+        if (inTransaction) {
+          await tx.query('ROLLBACK').catch(() => undefined);
+          inTransaction = false;
+        }
+
+        const message = error instanceof Error ? error.message : 'Unknown billing error';
 
         if (runItemId) {
-          await billingRepo.updateBillingRunItem(
-            tx,
-            runItemId,
-            'failed',
-            null,
-            message
-          ).catch((updateError: unknown) => {
-            this.app.log.error(updateError);
-          });
+          await billingRepo
+            .updateBillingRunItem(tx, runItemId, 'failed', null, message)
+            .catch((updateError: unknown) => this.app.log.error(updateError));
         }
 
         failed++;
-
-        this.app.log.error(
-          {
-            subscriptionId: sub.id,
-            error: message
-          },
-          'Subscription billing failed'
-        );
+        this.app.log.error({ subscriptionId: sub.id, error: message }, 'Subscription billing failed');
       } finally {
         tx.release();
       }
     }
 
-    // Finalize billing run.
     const finalStatus =
-      failed === 0
-        ? 'completed'
-        : invoicesCreated === 0 && skipped === 0
-          ? 'failed'
-          : 'partially_failed';
+      failed === 0 ? 'completed' : invoicesCreated === 0 && skipped === 0 ? 'failed' : 'partially_failed';
 
-    await db.query(
-      `UPDATE billing_runs
-       SET status = $1,
-           invoices_created = $2,
-           failure_count = $3,
-           completed_at = now()
-       WHERE id = $4`,
-      [
-        finalStatus,
-        invoicesCreated,
-        failed,
-        run.id
-      ]
-    );
+    const finalClient = await db.getClient();
+    try {
+      await billingRepo.finalizeBillingRun(finalClient, run.id, finalStatus, invoicesCreated, failed);
+    } finally {
+      finalClient.release();
+    }
 
     return {
       status: finalStatus,
@@ -321,129 +288,5 @@ export class BillingEngine {
       skipped,
       failed
     };
-  }
-
-  private toDateOnly(value: string | Date): string {
-    if (value instanceof Date) {
-      return value.toISOString().slice(0, 10);
-    }
-
-    return String(value).slice(0, 10);
-  }
-
-  private parseDate(value: string): Date {
-    const date = new Date(`${value}T00:00:00.000Z`);
-
-    if (Number.isNaN(date.getTime())) {
-      throw new Error(`Invalid billing date: ${value}`);
-    }
-
-    return date;
-  }
-
-  private calculatePeriodIndex(
-    startDate: string,
-    billingDate: string,
-    interval: string
-  ): number {
-    const start = this.parseDate(startDate);
-    const current = this.parseDate(billingDate);
-
-    if (current < start) {
-      throw new Error(
-        'Billing date cannot be before subscription start date'
-      );
-    }
-
-    let index: number;
-
-    if (interval === 'daily') {
-      index =
-        Math.floor(
-          (current.getTime() - start.getTime()) / 86400000
-        ) + 1;
-    } else if (interval === 'monthly') {
-      index =
-        (current.getUTCFullYear() - start.getUTCFullYear()) * 12 +
-        current.getUTCMonth() -
-        start.getUTCMonth() +
-        1;
-    } else if (interval === 'yearly') {
-      index =
-        current.getUTCFullYear() -
-        start.getUTCFullYear() +
-        1;
-    } else {
-      throw new Error(
-        `Unsupported billing interval: ${interval}`
-      );
-    }
-
-    if (!Number.isSafeInteger(index) || index < 1) {
-      throw new Error('Invalid billing period index');
-    }
-
-    return index;
-  }
-
-  // Add months while preserving the day where possible.
-  // Example: January 31 + 1 month = February 28/29.
-  private addMonthsClamped(date: Date, months: number): Date {
-    const result = new Date(date);
-    const originalDay = result.getUTCDate();
-
-    result.setUTCDate(1);
-    result.setUTCMonth(result.getUTCMonth() + months);
-
-    const lastDay = new Date(
-      Date.UTC(
-        result.getUTCFullYear(),
-        result.getUTCMonth() + 1,
-        0
-      )
-    ).getUTCDate();
-
-    result.setUTCDate(Math.min(originalDay, lastDay));
-
-    return result;
-  }
-
-  private calculatePeriodEnd(
-    startDate: string,
-    interval: string
-  ): string {
-    const start = this.parseDate(startDate);
-    let endExclusive: Date;
-
-    if (interval === 'daily') {
-      endExclusive = new Date(start);
-      endExclusive.setUTCDate(
-        endExclusive.getUTCDate() + 1
-      );
-    } else if (interval === 'monthly') {
-      endExclusive = this.addMonthsClamped(start, 1);
-    } else if (interval === 'yearly') {
-      endExclusive = this.addMonthsClamped(start, 12);
-    } else {
-      throw new Error(
-        `Unsupported billing interval: ${interval}`
-      );
-    }
-
-    endExclusive.setUTCDate(
-      endExclusive.getUTCDate() - 1
-    );
-
-    return endExclusive.toISOString().slice(0, 10);
-  }
-
-  private addDays(date: string, days: number): string {
-    const result = this.parseDate(date);
-
-    result.setUTCDate(
-      result.getUTCDate() + days
-    );
-
-    return result.toISOString().slice(0, 10);
   }
 }

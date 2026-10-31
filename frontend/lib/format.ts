@@ -25,7 +25,14 @@ export function formatPrice(
     return "Free";
   }
 
-  const suffix = interval === "MONTHLY" ? "/mo" : "/yr";
+  const suffix =
+    interval === "DAILY"
+      ? "/day"
+      : interval === "WEEKLY"
+        ? "/wk"
+        : interval === "MONTHLY"
+          ? "/mo"
+          : "/yr";
   return `${formatCurrency(amountInMinorUnits, currency)}${suffix}`;
 }
 

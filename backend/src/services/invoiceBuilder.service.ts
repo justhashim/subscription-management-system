@@ -1,21 +1,21 @@
-
+// src/services/invoiceBuilder.service.ts
 import {
+  allocateDiscount,
+  calculateInvoiceTotals,
   calculateLineItem,
-  type LineItemInput,
-  type LineItemResult
+  type InvoiceTotals
 } from '../utils/financialMath.js';
 
-type SubscriptionItem = {
-  product_id: string;
+export type BillingItem = {
+  product_id: string | null;
   product_name: string;
   variant_name?: string | null;
-  quantity: number;
+  quantity: number | string;
   unit_price: number | string;
-  variant_adjustment?: number | string;
 };
 
-type InvoiceLine = {
-  productId: string;
+export type InvoiceLine = {
+  productId: string | null;
   description: string;
   quantity: number;
   unitPrice: number;
@@ -25,84 +25,88 @@ type InvoiceLine = {
   lineTotal: number;
 };
 
-export class InvoiceBuilder {
-  buildInvoiceItems(
-    subscriptionItems: SubscriptionItem[],
-    applicableDiscounts: unknown[] = [],
-    taxRateBasisPoints = 0
-  ): {
-    lines: InvoiceLine[];
-    calculatedResults: LineItemResult[];
-  } {
-    // Discount codes are validated and claimed by DiscountManager.
-    // They are not product-specific rules in the current database schema.
-    void applicableDiscounts;
+type PreparedItem = {
+  productId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
 
-    if (!Array.isArray(subscriptionItems) || subscriptionItems.length === 0) {
+export class InvoiceBuilder {
+  private prepare(items: BillingItem[]): PreparedItem[] {
+    if (!Array.isArray(items) || items.length === 0) {
       throw new Error('At least one subscription item is required');
     }
 
-    if (
-      !Number.isSafeInteger(taxRateBasisPoints) ||
-      taxRateBasisPoints < 0 ||
-      taxRateBasisPoints > 10000
-    ) {
-      throw new Error('Tax rate must be between 0 and 10000 basis points');
-    }
-
-    const lines: InvoiceLine[] = [];
-    const calculatedResults: LineItemResult[] = [];
-
-    for (const item of subscriptionItems) {
+    return items.map((item) => {
       const unitPrice = Number(item.unit_price);
       const quantity = Number(item.quantity);
-      const variantAdjustment = Number(item.variant_adjustment ?? 0);
 
-      if (!item.product_id || !item.product_name?.trim()) {
+      if (!item.product_name?.trim()) {
         throw new Error('Subscription item is missing product information');
       }
-
       if (
-        !Number.isSafeInteger(unitPrice) ||
-        unitPrice < 0 ||
-        !Number.isSafeInteger(quantity) ||
-        quantity <= 0 ||
-        !Number.isSafeInteger(variantAdjustment)
+        !Number.isSafeInteger(unitPrice) || unitPrice < 0 ||
+        !Number.isSafeInteger(quantity) || quantity <= 0
       ) {
         throw new Error(`Invalid price or quantity for ${item.product_name}`);
       }
 
-      const input: LineItemInput = {
-        planPrice: unitPrice,
-        variantAdjustment,
+      return {
+        productId: item.product_id ?? null,
+        description: item.variant_name
+          ? `${item.product_name} - ${item.variant_name}`
+          : item.product_name,
         quantity,
-        lineDiscountAmount: 0,
-        proratedSubDiscount: 0,
-        taxRateBasisPoints
+        unitPrice
       };
+    });
+  }
 
-      const result = calculateLineItem(input);
-      calculatedResults.push(result);
-
-      const description = item.variant_name
-        ? `${item.product_name} - ${item.variant_name}`
-        : item.product_name;
-
-      lines.push({
-        productId: item.product_id,
-        description,
-        quantity,
-        unitPrice: result.unitPrice,
-        discountAmount: 0,
-        taxRateBasisPoints,
-        taxAmount: result.taxAmount,
-        lineTotal: result.lineTotal
-      });
-    }
-
+  /** Pre-discount subtotal and total quantity, used to check discount eligibility. */
+  summarize(items: BillingItem[]): { subtotal: number; quantity: number } {
+    const prepared = this.prepare(items);
     return {
-      lines,
-      calculatedResults
+      subtotal: prepared.reduce((acc, p) => acc + p.unitPrice * p.quantity, 0),
+      quantity: prepared.reduce((acc, p) => acc + p.quantity, 0)
     };
+  }
+
+  /**
+   * Builds invoice lines and totals. An invoice-level discount is split across
+   * the lines first, then tax is calculated on each discounted line.
+   */
+  build(
+    items: BillingItem[],
+    taxRateBasisPoints: number,
+    discountAmount = 0
+  ): { lines: InvoiceLine[]; totals: InvoiceTotals } {
+    const prepared = this.prepare(items);
+    const shares = allocateDiscount(
+      prepared.map((p) => p.unitPrice * p.quantity),
+      discountAmount
+    );
+
+    const results = prepared.map((p, index) =>
+      calculateLineItem({
+        unitPrice: p.unitPrice,
+        quantity: p.quantity,
+        discountAmount: shares[index],
+        taxRateBasisPoints
+      })
+    );
+
+    const lines: InvoiceLine[] = prepared.map((p, index) => ({
+      productId: p.productId,
+      description: p.description,
+      quantity: p.quantity,
+      unitPrice: p.unitPrice,
+      discountAmount: results[index].discountAmount,
+      taxRateBasisPoints,
+      taxAmount: results[index].taxAmount,
+      lineTotal: results[index].lineTotal
+    }));
+
+    return { lines, totals: calculateInvoiceTotals(results) };
   }
 }

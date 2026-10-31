@@ -1,59 +1,115 @@
-// src/controllers/invoices.controller.ts
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+// src/controllers/invoice.controller.ts
+import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { invoiceRepo, type InvoiceStatus } from '../repositories/invoiceRepo.js';
+import { InvoiceActionError, InvoiceLifecycle } from '../services/invoiceLifecycle.service.js';
+import { renderInvoiceHtml } from '../templates/invoicePrint.js';
+import { customerScope, type AuthUser } from '../plugins/auth.plugin.js';
+
+const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+
+const idParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string', pattern: UUID_PATTERN } }
+};
+
+// Customers may only view their own invoices, and never drafts.
+const hiddenFrom = (user: AuthUser, invoice: { customer_id: string; status: string }) =>
+  user.role === 'customer' && (!user.customerIds.includes(invoice.customer_id) || invoice.status === 'draft');
 
 export default async function invoicesController(fastify: FastifyInstance) {
-  
-  /**
-   * Fetch paginated invoices for the finance dashboard[cite: 8]
-   * Keysets or limits should be used to ensure sub-2-second response times[cite: 4, 8].
-   */
-  fastify.get('/api/invoices', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { status, limit = 50, offset = 0 } = request.query as any;
-    
-    let query = `SELECT id, invoice_number, status, total_amount, due_date FROM invoices`;
-    let params: any[] = [];
-    
-    if (status) {
-      query += ` WHERE status = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
-      params = [status, limit, offset];
-    } else {
-      query += ` ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
-      params = [limit, offset];
-    }
+  const lifecycle = new InvoiceLifecycle(fastify);
+  const staff = fastify.requireRole('admin', 'staff');
 
-    try {
-      const { rows } = await fastify.db.query(query, params);
-      return reply.send({ data: rows });
-    } catch (error) {
-      fastify.log.error(error);
-      return reply.status(500).send({ error: 'Failed to fetch invoices' });
+  const handleError = (reply: FastifyReply, error: unknown, fallback: string) => {
+    if (error instanceof InvoiceActionError) {
+      return reply.status(error.statusCode).send({ error: error.message });
     }
-  });
+    fastify.log.error(error);
+    return reply.status(500).send({ error: fallback });
+  };
 
-  /**
-   * Void an issued invoice[cite: 1, 4]
-   * Corrections require void-and-reissue rather than editing[cite: 1].
-   */
-  fastify.post('/api/invoices/:id/void', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as { id: string };
-    const dbClient = await fastify.db.getClient();
-    
+  const runAction = (action: 'confirm' | 'cancel' | 'void', fallback: string) =>
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { id } = request.params as { id: string };
+      try {
+        const result = await lifecycle[action](id);
+        return reply.send({ success: true, ...result });
+      } catch (error) {
+        return handleError(reply, error, fallback);
+      }
+    };
+
+  /** Paginated invoice list (indexed filter + LIMIT keeps it fast). */
+  fastify.get('/api/invoices', {
+    preHandler: fastify.authenticate,
+    schema: {
+      querystring: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['draft', 'issued', 'partially_paid', 'paid', 'void'] },
+          limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+          offset: { type: 'integer', minimum: 0, default: 0 }
+        }
+      }
+    }
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { status, limit = 50, offset = 0 } = request.query as {
+      status?: InvoiceStatus; limit?: number; offset?: number;
+    };
+
+    const client = await fastify.db.getClient();
     try {
-      await dbClient.query('BEGIN');
-      
-      // Update invoice status to void[cite: 4]
-      await dbClient.query(`UPDATE invoices SET status = 'void' WHERE id = $1`, [id]);
-      
-      // In a full implementation, you would also release claimed discount quotas here[cite: 2]
-      
-      await dbClient.query('COMMIT');
-      return reply.send({ success: true, message: 'Invoice voided successfully' });
+      const data = await invoiceRepo.listInvoices(client, status, limit, offset, customerScope(request.user));
+      return reply.send({ data, limit, offset });
     } catch (error) {
-      await dbClient.query('ROLLBACK');
-      fastify.log.error(error);
-      return reply.status(500).send({ error: 'Failed to void invoice' });
+      return handleError(reply, error, 'Failed to fetch invoices');
     } finally {
-      dbClient.release();
+      client.release();
     }
   });
+
+  /** One invoice with its line items. */
+  fastify.get('/api/invoices/:id', { preHandler: fastify.authenticate, schema: { params: idParams } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const client = await fastify.db.getClient();
+      try {
+        const invoice = await invoiceRepo.getInvoiceWithItems(client, id);
+        if (!invoice || hiddenFrom(request.user, invoice)) return reply.status(404).send({ error: 'Invoice not found' });
+        return reply.send({ data: invoice });
+      } catch (error) {
+        return handleError(reply, error, 'Failed to fetch invoice');
+      } finally {
+        client.release();
+      }
+    });
+
+  /** Printable invoice (HTML; use the browser's Print / Save as PDF). */
+  fastify.get('/api/invoices/:id/print', { preHandler: fastify.authenticate, schema: { params: idParams } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const client = await fastify.db.getClient();
+      try {
+        const invoice = await invoiceRepo.getInvoiceWithItems(client, id);
+        if (!invoice || hiddenFrom(request.user, invoice)) return reply.status(404).send({ error: 'Invoice not found' });
+        return reply.type('text/html; charset=utf-8').send(renderInvoiceHtml(invoice));
+      } catch (error) {
+        return handleError(reply, error, 'Failed to render invoice');
+      } finally {
+        client.release();
+      }
+    });
+
+  /** Draft -> issued. */
+  fastify.post('/api/invoices/:id/confirm', { preHandler: staff, schema: { params: idParams } },
+    runAction('confirm', 'Failed to confirm invoice'));
+
+  /** Cancel a draft invoice. */
+  fastify.post('/api/invoices/:id/cancel', { preHandler: staff, schema: { params: idParams } },
+    runAction('cancel', 'Failed to cancel invoice'));
+
+  /** Void an issued invoice (corrections use void and re-issue, never edits). */
+  fastify.post('/api/invoices/:id/void', { preHandler: staff, schema: { params: idParams } },
+    runAction('void', 'Failed to void invoice'));
 }

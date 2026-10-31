@@ -43,7 +43,7 @@ const planSchema = z.object({
     .max(240, "Description is too long."),
   price: z.number().min(0, "Price cannot be negative."),
   currency: z.enum(["USD", "EUR", "GBP"]),
-  interval: z.enum(["MONTHLY", "YEARLY"]),
+  interval: z.enum(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
   features: z.string().max(1000, "Features are too long."),
   status: z.enum(["ACTIVE", "ARCHIVED"]),
 });
@@ -259,6 +259,8 @@ export function PlanDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="DAILY">Daily</SelectItem>
+                      <SelectItem value="WEEKLY">Weekly</SelectItem>
                       <SelectItem value="MONTHLY">Monthly</SelectItem>
                       <SelectItem value="YEARLY">Yearly</SelectItem>
                     </SelectContent>

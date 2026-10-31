@@ -35,7 +35,7 @@ const userSchema = z.object({
     .min(2, "Name must be at least 2 characters.")
     .max(60, "Name is too long."),
   email: z.string().trim().email("Enter a valid email address."),
-  role: z.enum(["ADMIN", "MEMBER"]),
+  role: z.enum(["ADMIN", "STAFF", "CUSTOMER", "MEMBER"]),
   status: z.enum(["ACTIVE", "INVITED", "SUSPENDED"]),
 });
 
@@ -149,8 +149,10 @@ export function UserDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="MEMBER">Member</SelectItem>
                       <SelectItem value="ADMIN">Admin</SelectItem>
+                      <SelectItem value="STAFF">Staff</SelectItem>
+                      <SelectItem value="CUSTOMER">Customer</SelectItem>
+                      <SelectItem value="MEMBER">Member</SelectItem>
                     </SelectContent>
                   </Select>
                 )}

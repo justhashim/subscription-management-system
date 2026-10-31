@@ -423,6 +423,14 @@ The seed also includes demo products, plans, taxes, discounts, and quotation tem
 npm run dev
 ```
 
+Before starting the backend, copy `backend/.env.example` to `backend/.env`, set
+`DATABASE_URL` and a 16+ character `JWT_SECRET`, then apply the schema:
+
+```bash
+pnpm --filter backend migrate
+ADMIN_EMAIL=admin@brightloop.test ADMIN_PASSWORD='Admin@1234' pnpm --filter backend seed:admin
+```
+
 The API runs on:
 
 ```text

@@ -23,10 +23,18 @@ export const queryKeys = {
   plans: ["plans"] as const,
   subscriptions: ["subscriptions"] as const,
   subscription: (id: string) => ["subscriptions", id] as const,
+  operations: ["operations"] as const,
 };
 
 export function useUsers() {
   return useQuery({ queryKey: queryKeys.users, queryFn: api.users.list });
+}
+
+export function useOperationsSnapshot() {
+  return useQuery({
+    queryKey: queryKeys.operations,
+    queryFn: api.operations.snapshot,
+  });
 }
 
 export function useProducts() {

@@ -16,16 +16,18 @@ import type {
   UpdateSubscriptionInput,
   UpdateUserInput,
   User,
+  OperationsSnapshot,
 } from "@/types/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 function unwrapList<T>(value: T[] | { data: T[] }) {
   return Array.isArray(value) ? value : value.data;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const apiPath = path.startsWith("/api/") ? path : `/api${path}`;
+  const response = await fetch(`${API_URL}${apiPath}`, {
     ...init,
     credentials: "include",
     headers: {
@@ -53,7 +55,10 @@ function body(value: unknown) {
 }
 
 function normalizeAuthUser(value: AuthUser | { user: AuthUser }) {
-  return "user" in value ? value.user : value;
+  const raw = "user" in value ? value.user : value;
+  return "data" in (raw as AuthUser & { data?: AuthUser })
+    ? (raw as AuthUser & { data: AuthUser }).data
+    : raw;
 }
 
 export const httpApi: ApiClient = {
@@ -172,6 +177,12 @@ export const httpApi: ApiClient = {
         method: "PATCH",
         body: body(input),
       });
+    },
+  },
+
+  operations: {
+    async snapshot() {
+      return request<OperationsSnapshot>("/operations/snapshot");
     },
   },
 };
