@@ -10,13 +10,14 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Commands
 
-- Use pnpm 12.11.2 (`frontend/package.json`); install dependencies from the repository root with `pnpm install`.
+- Use pnpm 12.11.2; install dependencies from the repository root with `pnpm install`.
 - Run the app with `pnpm --filter frontend dev`; run checks with `pnpm --filter frontend lint` and `pnpm --filter frontend build`. The standalone `pnpm --filter frontend exec tsc --noEmit` works after Next has generated `.next` types (via `dev` or `build`).
+- Run the backend with `pnpm --filter backend dev`; verify it with `pnpm --filter backend typecheck` and `pnpm --filter backend build`.
 - There is no test runner or test script configured; do not assume `pnpm test` exists.
 
 ## Structure and constraints
 
-- `frontend/` is the only configured pnpm workspace package: it is the Next.js 16 App Router app. Its entrypoint is `frontend/app/page.tsx`, with layout/metadata in `frontend/app/layout.tsx` and styles in `frontend/app/globals.css`.
-- `backend/` is reserved for backend code and currently has no package or runtime.
+- `frontend/` is the Next.js 16 App Router workspace package. Its entrypoint is `frontend/app/page.tsx`, with layout/metadata in `frontend/app/layout.tsx` and styles in `frontend/app/globals.css`.
+- `backend/` is a standalone Fastify TypeScript service. Build output goes to `backend/dist/`; application construction lives in `backend/src/app.ts`, while `backend/src/server.ts` owns process startup.
 - The `@/*` TypeScript alias resolves from the `frontend/` root. Keep generated `.next/`, `frontend/next-env.d.ts`, and environment files out of commits.
 - Tailwind CSS 4 is wired through the Next Turbopack CSS loader in `frontend/next.config.ts`; use the filtered Next commands rather than assuming a separate Tailwind CLI step.
