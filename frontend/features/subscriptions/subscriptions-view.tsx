@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  CalendarClock,
   CreditCard,
   MoreHorizontal,
   Plus,
@@ -447,11 +446,6 @@ export function SubscriptionsView({
         pending={updateSubscription.isPending}
       />
 
-      <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
-        <CalendarClock className="size-3.5" />
-        Renewal dates and lifecycle transitions are display-only in this demo and
-        will come from the subscription service.
-      </div>
     </div>
   );
 }

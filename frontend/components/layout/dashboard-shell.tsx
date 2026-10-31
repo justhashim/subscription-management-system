@@ -245,17 +245,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <Logo />
         </div>
         <NavigationLinks pathname={pathname} isAdmin={isAdmin} isCustomer={isCustomer} />
-        <div className="border-t p-3">
-          <div className="rounded-xl bg-sidebar-accent/60 p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-sidebar-accent-foreground">
-              <ShieldCheck className="size-3.5" />
-              Demo workspace
-            </div>
-            <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
-              Data is stored locally and resets with the browser.
-            </p>
-          </div>
-        </div>
       </aside>
 
       <div className="lg:pl-64">
