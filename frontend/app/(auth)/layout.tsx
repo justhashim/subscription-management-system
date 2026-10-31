@@ -40,7 +40,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               {
                 icon: ShieldCheck,
                 title: "Role-aware access",
-                copy: "Admins manage the catalog and team. Members stay focused.",
+                copy: "Admins manage the catalog and team. Internal staff run daily operations.",
               },
               {
                 icon: Layers,

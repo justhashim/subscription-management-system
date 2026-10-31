@@ -53,7 +53,7 @@ const statusBarColors: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isStaff } = useAuth();
   const router = useRouter();
   const usersQuery = useUsers();
   const productsQuery = useProducts();
@@ -76,7 +76,7 @@ export default function DashboardPage() {
   const plans = plansQuery.data ?? [];
   const subscriptions = subscriptionsQuery.data ?? [];
 
-  const visibleSubscriptions = isAdmin
+  const visibleSubscriptions = isAdmin || isStaff
     ? subscriptions
     : subscriptions.filter((item) => item.userId === user?.id);
 
@@ -189,9 +189,9 @@ export default function DashboardPage() {
               variant="outline"
               className="hidden border-border bg-card text-muted-foreground sm:inline-flex"
             >
-              {isAdmin ? "Workspace admin" : "Member view"}
+              {isAdmin ? "Workspace admin" : isStaff ? "Internal staff view" : "Customer view"}
             </Badge>
-            {isAdmin ? (
+            {isAdmin || isStaff ? (
               <Button asChild size="sm">
                 <Link href="/subscriptions?create=true">
                   <Plus />

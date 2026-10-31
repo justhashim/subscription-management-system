@@ -1,6 +1,6 @@
 import { createSeedData, type MockData } from "./seed";
 
-const STORAGE_KEY = "orbit.mock-data.v1";
+const STORAGE_KEY = "orbit.mock-data.v2";
 
 let memoryData: MockData | null = null;
 

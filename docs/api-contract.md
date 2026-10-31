@@ -27,7 +27,7 @@ Frontend integration contract for the Orbit subscription workspace. The frontend
 
 | Type | Values |
 | --- | --- |
-| Role | `ADMIN`, `MEMBER` |
+| Role | `ADMIN`, `STAFF`, `CUSTOMER` |
 | User status | `ACTIVE`, `INVITED`, `SUSPENDED` |
 | Product status | `ACTIVE`, `ARCHIVED` |
 | Plan status | `ACTIVE`, `ARCHIVED` |
@@ -99,7 +99,7 @@ interface User {
   id: string;
   name: string;
   email: string;
-  role: "ADMIN" | "MEMBER";
+  role: "ADMIN" | "STAFF" | "CUSTOMER";
   status: "ACTIVE" | "INVITED" | "SUSPENDED";
   createdAt: string;
 }
@@ -142,7 +142,8 @@ Frontend list views expect plans with an embedded `product`, and subscriptions w
 ## Permissions
 
 - `ADMIN`: manage users, products, plans; view and manage all subscriptions.
-- `MEMBER`: read the active catalog; view and cancel only their own subscriptions.
+- `STAFF`: manage customers, quotations, subscriptions, invoices, payments, and billing operations.
+- `CUSTOMER`: read the active catalog and access only their own subscriptions, quotations, invoices, and payments.
 - The frontend hides unauthorized UI and redirects protected routes, but the backend must enforce authorization for every endpoint.
 
 ## Backend Integration Notes

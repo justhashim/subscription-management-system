@@ -134,7 +134,7 @@ export const mockApi: ApiClient = {
         id: createId("usr"),
         name,
         email,
-        role: "MEMBER" as const,
+        role: "CUSTOMER" as const,
         status: "ACTIVE" as const,
         createdAt: new Date().toISOString(),
         password,

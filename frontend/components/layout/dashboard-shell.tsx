@@ -296,7 +296,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               variant="outline"
               className="hidden border-indigo-200 bg-indigo-50 text-indigo-700 sm:inline-flex dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300"
             >
-              {isAdmin ? "Admin access" : "Member access"}
+              {isAdmin ? "Admin access" : user.role === "STAFF" ? "Internal staff access" : "Customer access"}
             </Badge>
             <ThemeToggle />
             <DropdownMenu>

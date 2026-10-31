@@ -69,7 +69,7 @@ export function SubscriptionDetailView({ id }: { id: string }) {
   }
 
   const isOwner = subscription.userId === user?.id;
-  const canManage = isAdmin || isOwner;
+  const canManage = isAdmin || user?.role === "STAFF" || isOwner;
 
   if (!canManage) {
     return (
@@ -78,7 +78,7 @@ export function SubscriptionDetailView({ id }: { id: string }) {
         <EmptyState
           icon={ShieldAlert}
           title="You cannot view this subscription"
-          description="Members can only view subscriptions attached to their own account."
+          description="Customers can only view subscriptions attached to their own account."
         />
       </div>
     );

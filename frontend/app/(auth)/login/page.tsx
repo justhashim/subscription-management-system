@@ -50,8 +50,8 @@ export default function LoginPage() {
     }
   }
 
-  async function signInAsDemo(role: "admin" | "member") {
-    const email = `${role}@example.com`;
+  async function signInAsDemo(role: "admin" | "staff" | "customer") {
+    const email = role === "customer" ? "sofia@acme.io" : `${role}@example.com`;
     setValue("email", email, { shouldValidate: true });
     setValue("password", "password", { shouldValidate: true });
     await onSubmit({ email, password: "password" });
@@ -75,7 +75,7 @@ export default function LoginPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid gap-2 sm:grid-cols-3">
         <button
           type="button"
           onClick={() => void signInAsDemo("admin")}
@@ -84,18 +84,29 @@ export default function LoginPage() {
         >
           <span className="text-[11px] font-semibold text-primary">Admin</span>
           <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-            Full catalog, users, and subscriptions
+            Full catalog, users, billing, and subscriptions
           </span>
         </button>
         <button
           type="button"
-          onClick={() => void signInAsDemo("member")}
+          onClick={() => void signInAsDemo("staff")}
           disabled={isSubmitting}
           className="rounded-xl border bg-card p-3 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/40 disabled:opacity-60"
         >
-          <span className="text-[11px] font-semibold text-primary">Member</span>
+          <span className="text-[11px] font-semibold text-primary">Internal staff</span>
           <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
-            Read-only catalog, own subscriptions
+            Operations, customers, and billing workflows
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void signInAsDemo("customer")}
+          disabled={isSubmitting}
+          className="rounded-xl border bg-card p-3 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/40 disabled:opacity-60"
+        >
+          <span className="text-[11px] font-semibold text-primary">Customer</span>
+          <span className="mt-1 block text-[11px] leading-4 text-muted-foreground">
+            Own portal, subscriptions, and invoices
           </span>
         </button>
       </div>

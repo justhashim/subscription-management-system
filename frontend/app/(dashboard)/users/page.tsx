@@ -219,7 +219,8 @@ export default function UsersPage() {
             <SelectContent>
               <SelectItem value="ALL">All roles</SelectItem>
               <SelectItem value="ADMIN">Admin</SelectItem>
-              <SelectItem value="MEMBER">Member</SelectItem>
+              <SelectItem value="STAFF">Internal staff</SelectItem>
+              <SelectItem value="CUSTOMER">Customer</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>

@@ -52,11 +52,11 @@ export function createSeedData(): MockData {
     password: "password",
   };
 
-  const member: MockUser = {
+  const staff: MockUser = {
     id: "usr_member",
     name: "Jordan Lee",
-    email: "member@example.com",
-    role: "MEMBER",
+    email: "staff@example.com",
+    role: "STAFF",
     status: "ACTIVE",
     createdAt: isoMonthsAgo(7),
     password: "password",
@@ -64,12 +64,12 @@ export function createSeedData(): MockData {
 
   const users: MockUser[] = [
     admin,
-    member,
+    staff,
     {
       id: "usr_sofia",
       name: "Sofia Martinez",
       email: "sofia@acme.io",
-      role: "MEMBER",
+      role: "CUSTOMER",
       status: "ACTIVE",
       createdAt: isoMonthsAgo(5),
       password: "password",
@@ -78,7 +78,7 @@ export function createSeedData(): MockData {
       id: "usr_noah",
       name: "Noah Williams",
       email: "noah@northstar.dev",
-      role: "MEMBER",
+      role: "CUSTOMER",
       status: "INVITED",
       createdAt: isoDaysAgo(12),
       password: "password",
@@ -87,7 +87,7 @@ export function createSeedData(): MockData {
       id: "usr_priya",
       name: "Priya Patel",
       email: "priya@lumen.co",
-      role: "MEMBER",
+      role: "CUSTOMER",
       status: "ACTIVE",
       createdAt: isoMonthsAgo(3),
       password: "password",
@@ -96,7 +96,7 @@ export function createSeedData(): MockData {
       id: "usr_marcus",
       name: "Marcus Chen",
       email: "marcus@vertex.io",
-      role: "MEMBER",
+      role: "CUSTOMER",
       status: "SUSPENDED",
       createdAt: isoMonthsAgo(8),
       password: "password",

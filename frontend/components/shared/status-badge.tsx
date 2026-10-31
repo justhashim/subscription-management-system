@@ -6,7 +6,7 @@ const statusStyles: Record<string, string> = {
   ACTIVE: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
   ADMIN:
     "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300",
-  MEMBER: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-300",
+  STAFF: "bg-slate-100 text-slate-700 dark:bg-slate-500/10 dark:text-slate-300",
   INVITED:
     "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
   SUSPENDED: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300",
@@ -42,6 +42,8 @@ export function StatusBadge({
   status: string;
   className?: string;
 }) {
+  const label = status === "STAFF" ? "Internal staff" : titleCase(status);
+
   return (
     <Badge
       variant="outline"
@@ -52,7 +54,7 @@ export function StatusBadge({
       )}
     >
       <span className="size-1.5 rounded-full bg-current opacity-70" />
-      {titleCase(status)}
+      {label}
     </Badge>
   );
 }
