@@ -78,7 +78,7 @@ export class BillingEngine {
       };
     }
 
-    // Create billing run.
+    // Create the billing run record for this batch.
     const initClient = await db.getClient();
     let run: { id: string };
 
