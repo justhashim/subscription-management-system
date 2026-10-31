@@ -119,3 +119,23 @@ export function getPeriodForDate(
     nextBillingDate: next
   };
 }
+
+/**
+ * next_billing_date to use when a paused subscription resumes. Paused time is not billed:
+ * if the stored date is still in the future it is kept, otherwise billing restarts at the
+ * first period boundary on or after `today`. Always lands on a period start, so the
+ * billing engine's period index stays correct.
+ */
+export function getResumeBillingDate(
+  startDate: string,
+  interval: string,
+  today: string,
+  currentNext: string | null
+): string {
+  assertDateString(startDate);
+  assertDateString(today);
+  if (currentNext && currentNext >= today) return currentNext;
+  if (today <= startDate) return startDate;
+  const period = getPeriodForDate(startDate, interval, today);
+  return period.periodStart === today ? today : period.nextBillingDate;
+}

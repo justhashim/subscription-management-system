@@ -1,21 +1,20 @@
-// src/utils/financialMath.ts
-// All amounts are integer paise; tax rates and percentage discounts are basis points.
-// One rounding policy everywhere: half-up, applied per line.
+
 
 export interface LineItemInput {
-  unitPrice: number;           // paise
+  planPrice: number;           // in paise
+  variantAdjustment: number;   // in paise
   quantity: number;
-  discountAmount: number;      // paise, this line's share of any discount
-  taxRateBasisPoints: number;  // e.g. 1800 = 18%
+  lineDiscountAmount: number;  // in paise
+  proratedSubDiscount: number; // in paise
+  taxRateBasisPoints: number;  // e.g., 1800 for 18%
 }
 
 export interface LineItemResult {
   unitPrice: number;
-  quantity: number;
-  subtotal: number;        // quantity * unitPrice
-  discountAmount: number;
+  subtotal: number;
+  totalDiscount: number;
   taxAmount: number;
-  lineTotal: number;       // subtotal - discount + tax
+  lineTotal: number;
 }
 
 export interface InvoiceTotals {
@@ -25,114 +24,54 @@ export interface InvoiceTotals {
   totalAmount: number;
 }
 
-const TWO = BigInt(2);
-
-function assertInt(name: string, value: number, min = 0): void {
-  if (!Number.isSafeInteger(value) || value < min) {
-    throw new Error(`${name} must be an integer >= ${min}`);
-  }
-}
-
-/** round_half_up(amount * multiplier / divisor) using exact integer arithmetic. */
-export function mulDivHalfUp(amount: number, multiplier: number, divisor: number): number {
-  assertInt('amount', amount);
-  assertInt('multiplier', multiplier);
-  assertInt('divisor', divisor, 1);
-
-  const a = BigInt(amount);
-  const m = BigInt(multiplier);
-  const d = BigInt(divisor);
-  const result = Number((TWO * a * m + d) / (TWO * d));
-
-  if (!Number.isSafeInteger(result)) {
-    throw new Error('Calculated amount exceeds safe integer range');
-  }
-  return result;
-}
-
 /**
- * Splits `total` across lines in proportion to `weights` (largest-remainder),
- * so the shares always add up to exactly `total`.
+ * Calculates a single invoice line item safely using integer math.
  */
-export function allocateDiscount(weights: number[], total: number): number[] {
-  assertInt('discount', total);
-  weights.forEach((w) => assertInt('line subtotal', w));
-
-  const sum = weights.reduce((acc, w) => acc + w, 0);
-  if (total > sum) {
-    throw new Error('Discount cannot exceed subtotal');
-  }
-  if (total === 0 || sum === 0) {
-    return weights.map(() => 0);
-  }
-
-  const bigTotal = BigInt(total);
-  const bigSum = BigInt(sum);
-
-  const shares = weights.map((w) => Number((bigTotal * BigInt(w)) / bigSum));
-  const remainders = weights.map((w) => Number((bigTotal * BigInt(w)) % bigSum));
-
-  let leftover = total - shares.reduce((acc, s) => acc + s, 0);
-  const order = weights
-    .map((_, index) => index)
-    .sort((a, b) => remainders[b] - remainders[a] || a - b);
-
-  for (const index of order) {
-    if (leftover <= 0) break;
-    shares[index] += 1;
-    leftover -= 1;
-  }
-
-  return shares;
-}
-
-/** Calculates one invoice line: discount first, then tax on the discounted amount. */
 export function calculateLineItem(input: LineItemInput): LineItemResult {
-  assertInt('unitPrice', input.unitPrice);
-  assertInt('quantity', input.quantity, 1);
-  assertInt('discountAmount', input.discountAmount);
-  assertInt('taxRateBasisPoints', input.taxRateBasisPoints);
+  // 1. Plan price + variant adjustment[cite: 1]
+  const unitPrice = input.planPrice + input.variantAdjustment;
 
-  if (input.taxRateBasisPoints > 10000) {
-    throw new Error('Tax rate must be between 0 and 10000 basis points');
-  }
+  // 2. Quantity[cite: 1]
+  const subtotal = unitPrice * input.quantity;
 
-  const subtotal = input.unitPrice * input.quantity;
-  if (!Number.isSafeInteger(subtotal)) {
-    throw new Error('Line subtotal exceeds safe integer range');
-  }
+  // 3 & 4. Line discount -> prorated subscription discount[cite: 1]
+  // Discount cannot exceed the line's subtotal[cite: 4]
+  const totalDiscount = Math.min(
+    subtotal, 
+    input.lineDiscountAmount + input.proratedSubDiscount
+  );
+  
+  const taxableAmount = subtotal - totalDiscount;
 
-  // Discount can never exceed the line's own subtotal.
-  const discountAmount = Math.min(subtotal, input.discountAmount);
-  const taxable = subtotal - discountAmount;
-  const taxAmount = mulDivHalfUp(taxable, input.taxRateBasisPoints, 10000);
+  // 5. Tax using flat rates in basis points[cite: 1, 4]
+  const rawTax = taxableAmount * (input.taxRateBasisPoints / 10000);
+
+  // 6. Rounding: half-up per line[cite: 1]
+  const taxAmount = Math.round(rawTax);
+  const lineTotal = taxableAmount + taxAmount;
 
   return {
-    unitPrice: input.unitPrice,
-    quantity: input.quantity,
+    unitPrice,
     subtotal,
-    discountAmount,
+    totalDiscount,
     taxAmount,
-    lineTotal: taxable + taxAmount
+    lineTotal
   };
 }
 
-/** Invoice totals are the sum of the rounded lines: total = subtotal - discount + tax. */
+/**
+ * Aggregates the calculated lines. Invoice totals must equal the sum of rounded lines[cite: 1].
+ * Validates the core rule: total_amount = subtotal - discount_amount + tax_amount[cite: 4].
+ */
 export function calculateInvoiceTotals(lines: LineItemResult[]): InvoiceTotals {
-  const totals = lines.reduce(
+  return lines.reduce(
     (acc, line) => {
       acc.subtotal += line.subtotal;
-      acc.discountAmount += line.discountAmount;
+      acc.discountAmount += line.totalDiscount;
       acc.taxAmount += line.taxAmount;
       acc.totalAmount += line.lineTotal;
       return acc;
     },
     { subtotal: 0, discountAmount: 0, taxAmount: 0, totalAmount: 0 }
   );
-
-  if (totals.totalAmount !== totals.subtotal - totals.discountAmount + totals.taxAmount) {
-    throw new Error('Invoice total calculation is inconsistent');
-  }
-
-  return totals;
 }

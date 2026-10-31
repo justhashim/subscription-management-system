@@ -1,52 +1,62 @@
-// src/services/discountManager.serivce.ts
+
 import type { PoolClient } from 'pg';
 import { discountRepo } from '../repositories/discountRepo.js';
-import { mulDivHalfUp } from '../utils/financialMath.js';
 
-export type DiscountEvaluation = {
-  discountId: string | null;
+type DiscountResult = {
   appliedAmount: number;
-  reason?: string;
+  discountId: string | null;
+  error?: string;
 };
 
-const notApplied = (reason: string): DiscountEvaluation => ({
-  discountId: null,
-  appliedAmount: 0,
-  reason
-});
-
 export class DiscountManager {
-  /**
-   * Validates a discount code against an invoice (active, date window, minimum
-   * purchase, minimum quantity, redemption limit) and works out the amount.
-   * The discount row stays locked until the surrounding transaction ends, so the
-   * limit cannot be exceeded by concurrent invoices.
-   *
-   * `pendingRedemptions` counts redemptions already granted in the same preview
-   * that are not yet stored in the database.
-   */
-  async evaluate(
-    db: PoolClient,
+  async claimDiscountAtomic(
+    tx: PoolClient,
     code: string,
-    subtotal: number,
-    quantity: number,
-    pendingRedemptions = 0
-  ): Promise<DiscountEvaluation> {
-    const trimmed = code.trim();
-    if (!trimmed) return notApplied('Discount code is required');
-
-    if (!Number.isSafeInteger(subtotal) || subtotal <= 0) {
-      return notApplied('Purchase amount must be a positive integer in paise');
+    invoiceId: string,
+    customerId: string,
+    purchaseAmount: number,
+    quantity: number
+  ): Promise<DiscountResult> {
+    if (!code.trim()) {
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Discount code is required'
+      };
     }
+
+    if (!Number.isSafeInteger(purchaseAmount) || purchaseAmount <= 0) {
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Purchase amount must be a positive integer in paise'
+      };
+    }
+
     if (!Number.isSafeInteger(quantity) || quantity <= 0) {
-      return notApplied('Quantity must be a positive integer');
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Quantity must be a positive integer'
+      };
     }
 
-    const discount = await discountRepo.getDiscountForUpdate(db, trimmed);
-    if (!discount) return notApplied('Discount invalid, expired, or inactive');
+    // The discount row is locked until the surrounding transaction ends.
+    const discount = await discountRepo.getDiscountForUpdate(
+      tx,
+      code.trim()
+    );
 
-    const minimumPurchase = Number(discount.minimum_purchase ?? 0);
-    const minimumQuantity = Number(discount.minimum_quantity ?? 1);
+    if (!discount) {
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Discount invalid, expired, or inactive'
+      };
+    }
+
+    const minimumPurchase = Number(discount.minimum_purchase);
+    const minimumQuantity = Number(discount.minimum_quantity);
     const discountValue = Number(discount.discount_value);
 
     if (
@@ -57,41 +67,77 @@ export class DiscountManager {
       throw new Error('Invalid discount configuration in database');
     }
 
-    if (subtotal < minimumPurchase) return notApplied('Minimum purchase amount not met');
-    if (quantity < minimumQuantity) return notApplied('Minimum quantity not met');
+    if (purchaseAmount < minimumPurchase) {
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Minimum purchase amount not met'
+      };
+    }
+
+    if (quantity < minimumQuantity) {
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Minimum quantity not met'
+      };
+    }
 
     if (discount.max_redemptions !== null) {
-      const used = await discountRepo.getRedemptionCount(db, discount.id);
-      if (used + pendingRedemptions >= Number(discount.max_redemptions)) {
-        return notApplied('Discount redemption limit reached');
+      const currentRedemptions =
+        await discountRepo.getRedemptionCount(tx, discount.id);
+
+      if (currentRedemptions >= Number(discount.max_redemptions)) {
+        return {
+          appliedAmount: 0,
+          discountId: null,
+          error: 'Discount redemption limit reached'
+        };
       }
     }
 
-    let appliedAmount: number;
+    let appliedAmount = 0;
+
     if (discount.discount_type === 'fixed') {
-      appliedAmount = Math.min(discountValue, subtotal);
+      appliedAmount = Math.min(discountValue, purchaseAmount);
     } else if (discount.discount_type === 'percentage') {
       if (discountValue < 0 || discountValue > 10000) {
         throw new Error('Percentage discount must be between 0 and 10000 basis points');
       }
-      appliedAmount = Math.min(mulDivHalfUp(subtotal, discountValue, 10000), subtotal);
+
+      // Integer arithmetic with half-up rounding.
+      appliedAmount = Math.floor(
+        (purchaseAmount * discountValue + 5000) / 10000
+      );
+      appliedAmount = Math.min(appliedAmount, purchaseAmount);
     } else {
       throw new Error('Unsupported discount type');
     }
 
-    if (appliedAmount <= 0) return notApplied('Discount amount is zero');
+    if (!Number.isSafeInteger(appliedAmount)) {
+      throw new Error('Calculated discount exceeds safe integer range');
+    }
 
-    return { discountId: discount.id, appliedAmount };
-  }
+    // Do not create a redemption if the discount has no monetary value.
+    if (appliedAmount <= 0) {
+      return {
+        appliedAmount: 0,
+        discountId: null,
+        error: 'Discount amount is zero'
+      };
+    }
 
-  /** Stores the redemption once the invoice exists (same transaction as the invoice). */
-  async redeem(
-    db: PoolClient,
-    discountId: string,
-    invoiceId: string,
-    customerId: string,
-    appliedAmount: number
-  ) {
-    return discountRepo.recordRedemption(db, discountId, invoiceId, customerId, appliedAmount);
+    await discountRepo.recordRedemption(
+      tx,
+      discount.id,
+      invoiceId,
+      customerId,
+      appliedAmount
+    );
+
+    return {
+      appliedAmount,
+      discountId: discount.id
+    };
   }
 }

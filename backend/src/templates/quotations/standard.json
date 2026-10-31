@@ -1,0 +1,7 @@
+{
+  "name": "standard",
+  "title": "Brightloop Subscription Quotation",
+  "valid_days": 30,
+  "notes": "Payment terms: net 15 days from invoice date. This quotation is valid for the period stated above.",
+  "lines": []
+}

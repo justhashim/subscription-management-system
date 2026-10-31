@@ -1,44 +1,44 @@
 // src/controllers/billing.controller.ts
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { BillingEngine } from '../services/billingEngine.service.js';
-
-const DATE_PATTERN = '^\\d{4}-\\d{2}-\\d{2}$';
+import { billingRepo } from '../repositories/billingRepo.js';
 
 export default async function billingController(fastify: FastifyInstance) {
   const billingEngine = new BillingEngine(fastify);
 
   /**
-   * Billing Cockpit dry run: subscriptions due and the exact invoice amounts a run
-   * would create. Writes nothing.
+   * Billing Cockpit: Dry Run / Preview[cite: 1]
+   * Displays subscriptions due and expected invoice amounts before committing[cite: 1].
    */
-  fastify.get('/api/billing/preview', {
-    schema: {
-      querystring: {
-        type: 'object',
-        required: ['targetDate'],
-        properties: {
-          targetDate: { type: 'string', pattern: DATE_PATTERN },
-          discountCode: { type: 'string', maxLength: 50 }
-        }
-      }
-    }
-  }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { targetDate, discountCode } = request.query as { targetDate: string; discountCode?: string };
-
+  fastify.get('/api/billing/preview', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { targetDate } = request.query as { targetDate: string };
+    
+    const dbClient = await fastify.db.getClient();
     try {
-      return reply.send(await billingEngine.preview(targetDate, discountCode));
+      const candidates = await billingRepo.getDueSubscriptions(dbClient, targetDate);
+      
+      // Calculate expected revenue for the preview[cite: 1]
+      let expectedRevenue = 0;
+      candidates.forEach(sub => {
+        expectedRevenue += parseInt(sub.plan_price, 10);
+      });
+
+      return reply.send({
+        subscriptionsDue: candidates.length,
+        expectedRevenue,
+        candidates
+      });
     } catch (error) {
       fastify.log.error(error);
-      const message = error instanceof Error && error.message.startsWith('Invalid date')
-        ? error.message
-        : 'Failed to generate billing preview';
-      return reply.status(message.startsWith('Invalid date') ? 400 : 500).send({ error: message });
+      return reply.status(500).send({ error: 'Failed to generate billing preview' });
+    } finally {
+      dbClient.release();
     }
   });
 
   /**
-   * Commit a billing run. Each subscription is billed in its own transaction, so one
-   * failure never blocks the others, and a period can never be invoiced twice.
+   * Commit the billing run[cite: 1]
+   * Executes the batch loop and safely traps duplicates[cite: 1, 4].
    */
   fastify.post('/api/billing/run', {
     schema: {
@@ -46,27 +46,19 @@ export default async function billingController(fastify: FastifyInstance) {
         type: 'object',
         required: ['targetDate', 'runNumber'],
         properties: {
-          targetDate: { type: 'string', pattern: DATE_PATTERN },
-          runNumber: { type: 'string', minLength: 1, maxLength: 50 },
-          discountCode: { type: 'string', maxLength: 50 }
+          targetDate: { type: 'string' },
+          runNumber: { type: 'string' }
         }
       }
     }
   }, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { targetDate, runNumber, discountCode } = request.body as {
-      targetDate: string; runNumber: string; discountCode?: string;
-    };
+    const { targetDate, runNumber } = request.body as { targetDate: string; runNumber: string };
 
     try {
-      return reply.send(await billingEngine.runBillingBatch(targetDate, runNumber, discountCode));
-    } catch (error: any) {
+      const result = await billingEngine.runBillingBatch(targetDate, runNumber);
+      return reply.send(result);
+    } catch (error) {
       fastify.log.error(error);
-      if (error?.code === '23505') {
-        return reply.status(409).send({ error: 'Billing run number already exists' });
-      }
-      if (error instanceof Error && error.message.startsWith('Invalid date')) {
-        return reply.status(400).send({ error: error.message });
-      }
       return reply.status(500).send({ error: 'Billing run failed' });
     }
   });
