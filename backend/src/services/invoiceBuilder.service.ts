@@ -1,77 +1,112 @@
 // src/services/invoiceBuilder.service.ts
-import { calculateLineItem, LineItemInput, LineItemResult } from '../utils/financialMath.js';
+import {
+  allocateDiscount,
+  calculateInvoiceTotals,
+  calculateLineItem,
+  type InvoiceTotals
+} from '../utils/financialMath.js';
+
+export type BillingItem = {
+  product_id: string | null;
+  product_name: string;
+  variant_name?: string | null;
+  quantity: number | string;
+  unit_price: number | string;
+};
+
+export type InvoiceLine = {
+  productId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discountAmount: number;
+  taxRateBasisPoints: number;
+  taxAmount: number;
+  lineTotal: number;
+};
+
+type PreparedItem = {
+  productId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+};
 
 export class InvoiceBuilder {
-  /**
-   * Maps active subscription items to immutable invoice lines[cite: 4].
-   * It extracts the agreed snapshot price and the selected JSONB variant adjustment.
-   */
-  buildInvoiceItems(
-    subscriptionItems: any[], 
-    applicableDiscounts: any[], 
-    taxRateBasisPoints: number = 1800 // Flat administrator-defined rate[cite: 1]
-  ): { lines: any[]; calculatedResults: LineItemResult[] } {
-    const lines: any[] = [];
-    const calculatedResults: LineItemResult[] = [];
+  private prepare(items: BillingItem[]): PreparedItem[] {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('At least one subscription item is required');
+    }
 
-    for (const item of subscriptionItems) {
-      // Extract variant adjustment if a variant was snapshotted[cite: 4]
-      let variantAdjustment = 0;
-      if (item.variant_name && item.product_variants) {
-        const variants = typeof item.product_variants === 'string' 
-          ? JSON.parse(item.product_variants) 
-          : item.product_variants;
-        
-        const selectedVariant = variants.find((v: any) => v.name === item.variant_name);
-        if (selectedVariant) {
-          variantAdjustment = selectedVariant.price_adjustment || 0;
-        }
+    return items.map((item) => {
+      const unitPrice = Number(item.unit_price);
+      const quantity = Number(item.quantity);
+
+      if (!item.product_name?.trim()) {
+        throw new Error('Subscription item is missing product information');
+      }
+      if (
+        !Number.isSafeInteger(unitPrice) || unitPrice < 0 ||
+        !Number.isSafeInteger(quantity) || quantity <= 0
+      ) {
+        throw new Error(`Invalid price or quantity for ${item.product_name}`);
       }
 
-      // Calculate specific line discounts (most specific rule wins)[cite: 2]
-      const lineDiscountAmount = this.calculateApplicableDiscount(item.product_id, applicableDiscounts, item.unit_price);
-
-      const mathInput: LineItemInput = {
-        planPrice: parseInt(item.unit_price, 10),
-        variantAdjustment,
-        quantity: item.quantity,
-        lineDiscountAmount,
-        proratedSubDiscount: 0, // Assume 0 unless a subscription-wide discount is applied
-        taxRateBasisPoints
+      return {
+        productId: item.product_id ?? null,
+        description: item.variant_name
+          ? `${item.product_name} - ${item.variant_name}`
+          : item.product_name,
+        quantity,
+        unitPrice
       };
-
-      const result = calculateLineItem(mathInput);
-      calculatedResults.push(result);
-
-      // Preserve product description and agreed price as an immutable snapshot[cite: 4]
-      lines.push({
-        productId: item.product_id,
-        description: `${item.product_name}${item.variant_name ? ` - ${item.variant_name}` : ''}`,
-        quantity: item.quantity,
-        unitPrice: result.unitPrice,
-        taxRateBasisPoints,
-        lineTotal: result.lineTotal
-      });
-    }
-
-    return { lines, calculatedResults };
+    });
   }
 
-  private calculateApplicableDiscount(productId: string, discounts: any[], unitPrice: number): number {
-    // Only one rule applies per scope; the most specific rule wins[cite: 2]
-    const productSpecific = discounts.find(d => d.scope === 'product' && d.product_id === productId);
-    if (productSpecific) return this.applyDiscountLogic(productSpecific, unitPrice);
-    
-    return 0; // Return 0 if no specific discount applies
+  /** Pre-discount subtotal and total quantity, used to check discount eligibility. */
+  summarize(items: BillingItem[]): { subtotal: number; quantity: number } {
+    const prepared = this.prepare(items);
+    return {
+      subtotal: prepared.reduce((acc, p) => acc + p.unitPrice * p.quantity, 0),
+      quantity: prepared.reduce((acc, p) => acc + p.quantity, 0)
+    };
   }
 
-  private applyDiscountLogic(discount: any, baseAmount: number): number {
-    if (discount.discount_type === 'fixed') {
-      return parseInt(discount.discount_value, 10);
-    }
-    if (discount.discount_type === 'percentage') {
-      return Math.round(baseAmount * (parseInt(discount.discount_value, 10) / 10000));
-    }
-    return 0;
+  /**
+   * Builds invoice lines and totals. An invoice-level discount is split across
+   * the lines first, then tax is calculated on each discounted line.
+   */
+  build(
+    items: BillingItem[],
+    taxRateBasisPoints: number,
+    discountAmount = 0
+  ): { lines: InvoiceLine[]; totals: InvoiceTotals } {
+    const prepared = this.prepare(items);
+    const shares = allocateDiscount(
+      prepared.map((p) => p.unitPrice * p.quantity),
+      discountAmount
+    );
+
+    const results = prepared.map((p, index) =>
+      calculateLineItem({
+        unitPrice: p.unitPrice,
+        quantity: p.quantity,
+        discountAmount: shares[index],
+        taxRateBasisPoints
+      })
+    );
+
+    const lines: InvoiceLine[] = prepared.map((p, index) => ({
+      productId: p.productId,
+      description: p.description,
+      quantity: p.quantity,
+      unitPrice: p.unitPrice,
+      discountAmount: results[index].discountAmount,
+      taxRateBasisPoints,
+      taxAmount: results[index].taxAmount,
+      lineTotal: results[index].lineTotal
+    }));
+
+    return { lines, totals: calculateInvoiceTotals(results) };
   }
 }
